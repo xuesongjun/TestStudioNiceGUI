@@ -6,12 +6,13 @@ class GeneralSelector:
     def __init__(self, 
                  selector_name: str, 
                  options: List[Any],
+                 value: Optional[Any] = None,
                  items_per_row: int = 4,
                  items_per_line_in_result: int = 5,
                  on_selection_change: Optional[Callable[[List[Any]], None]] = None):
         self.selector_name = selector_name
         self.options = options
-        self.selected_items = set()
+        self.selected_items = set(value) if value is not None else set()
         self.is_expanded = False
         self.items_per_row = items_per_row
         self.items_per_line_in_result = items_per_line_in_result
@@ -40,7 +41,7 @@ class GeneralSelector:
                 ui.button('全选', on_click=self.select_all).classes(
                     'px-4 py-2 bg-blue-500 text-white rounded'
                 )
-                ui.button('全不选', on_click=self.deselect_all).classes(
+                ui.button('全清', on_click=self.deselect_all).classes(
                     'px-4 py-2 bg-blue-500 text-white rounded'
                 )
             with ui.grid(columns=self.items_per_row).classes('gap-3'):
@@ -48,7 +49,7 @@ class GeneralSelector:
                 for item in self.options:
                     cb = ui.checkbox(
                         str(item), 
-                        value=False,
+                        value= item in self.selected_items,
                         on_change=lambda e, item=item: self.update_selection(item, e.value)
                     )
                     cb.classes('py-1 px-0')

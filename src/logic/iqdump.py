@@ -7,6 +7,8 @@ import serial #必须导入 不然捕获异常出错
 import plotly.graph_objects as go
 from colorama import Fore, Style
 from pages.layout import log
+from nicegui import ui
+from logic.iq_analyzer import analyze_iq_signal
 
 
 ble_if_offset_map = {
@@ -42,7 +44,7 @@ def hex2sint_list(hex_string_list,bits):
 
 def iqdump(
         fs:float=24e6,
-        SN:int=16384,
+        SN:int=4096,
         ip_str:str='169.254.252.37',
         tone_freq:float=0.0,
         com_num:int=46,
@@ -53,16 +55,18 @@ def iqdump(
         nbit:int=12,
         dump_type:int=0,
         chn_list:list[int]=list(range(40)),
-        ble_modes_list:list[str]=list(["LE1M","LE2M","LES2","LES8"])
+        ble_modes_list:list[str]=list(["LE1M","LE2M","LES2","LES8"]),
+        chart_update_callback=None
 ):
-    log("log INFO .................... start",color="blue")
-    log(ip_str)
-    log(chn_list)
-    log(ble_modes_list)
-    log(dump_type)
-    log(cable_loss)
-    log(AMPTD)
-    log("log INFO .................... end")
+    # log("log INFO .................... start",color="blue")
+    # log(com_num)
+    # log(ip_str)
+    # log(chn_list)
+    # log(ble_modes_list)
+    # log(dump_type)
+    # log(cable_loss)
+    # log(AMPTD)
+    # log("log INFO .................... end",color="red")
 
     try:
         rm = pyvisa.ResourceManager()
@@ -118,10 +122,10 @@ def iqdump(
 
     N5182B.write(f':POWer:LEVel {AMPTD+cable_loss} dBm')
     if(dump_type == 0):
-        log("dump noise")
+        #log("dump noise")
         dump_type_str = "noise"
     elif(dump_type == 1):
-        log("dump tone")
+        #log("dump tone")
         dump_type_str = "tone"
         N5182B.write(f':FREQuency:FIXed {2400+chn*2+tone_freq} MHz')
         N5182B.write(':SOURce:RADio:ARB:STATe OFF')
@@ -129,7 +133,7 @@ def iqdump(
         N5182B.write(':OUTPut:STATe ON')
     elif dump_type == 2:
         dump_type_str = "wave"
-        log("dump BLE wave")
+        #log("dump BLE wave")
         N5182B.write(f':FREQuency:FIXed {2400+chn*2} MHz')
         # 设置触发方式为单次触发且重复发送1500次
         N5182B.write(':RADio:ARB:TRIGger:TYPE SINGle')
@@ -171,6 +175,46 @@ def iqdump(
             Qdata = [hex_value[5:8] for hex_value in hex_list]
             Idata_dec_tmp = hex2sint_list(Idata,12)
             Qdata_dec_tmp = hex2sint_list(Qdata,12)
+            
+            # ========== 调用IQ数据分析 ==========
+            try:
+                log(f"开始分析IQ数据 - {ble_mode} 信道{chn} {dump_type_str}", color="blue")
+                
+                # 调用分析函数
+                analysis_result = analyze_iq_signal(
+                    Idata=Idata_dec_tmp,
+                    Qdata=Qdata_dec_tmp,
+                    fs=fs,
+                    vpp=vpp,
+                    nbit=nbit,
+                    sg_pwr=AMPTD,
+                    dump_noise=1 if dump_type == 0 else 0,
+                    figure_off=0,  # 显示图表
+                    target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6
+                )
+                
+                # 通过回调函数更新UI中的图表
+                if chart_update_callback and 'time_chart' in analysis_result and 'freq_chart' in analysis_result:
+                    try:
+                        chart_update_callback(analysis_result['time_chart'], analysis_result['freq_chart'])
+                        log("图表已更新到UI", color="blue")
+                    except Exception as chart_error:
+                        log(f"更新图表到UI时出错: {str(chart_error)}", color="red")
+                
+                # 输出分析结果
+                if dump_type == 0:  # noise
+                    log(f"噪声功率: {analysis_result.get('noise', 'N/A')} dBm", color="green")
+                else:  # tone or wave
+                    log(f"信号功率: {analysis_result.get('signal', 'N/A')} dBm", color="green")
+                    log(f"增益: {analysis_result.get('gain', 'N/A')} dB", color="green")
+                    log(f"DC功率: {analysis_result.get('dc', 'N/A')} dBm", color="green")
+                    log(f"镜像功率: {analysis_result.get('image', 'N/A')} dBm", color="green")
+                    log(f"SNR: {analysis_result.get('snr', 'N/A')} dB", color="green")
+                    log(f"IMRR: {analysis_result.get('imrr', 'N/A')} dB", color="green")
+                    
+            except Exception as e:
+                log(f"IQ数据分析出错: {str(e)}", color="red")
+            
             #交换IQ，并拼接成新的list
             IQSWAP_HEX = [g + i + q for g, i, q in zip(gain, Qdata, Idata)]
             # 指定文件路径
@@ -181,12 +225,9 @@ def iqdump(
                 for item in IQSWAP_HEX:
                     file.write(item + '\n')
 
-            # 定义加粗的 ANSI 转义序列
-            BOLD = '\033[1m'
-            # 定义重置样式的 ANSI 转义序列
-            END = '\033[0m'
+      
             
-            log(BOLD + Fore.RED + "数据已成功写入 iqdata_%s_%d_%s.txt 文件。"%(ble_mode,2400+chn*2-if_offset,dump_type_str) + Style.RESET_ALL + END,color="red")
+            log("数据已成功写入 iqdata_%s_%d_%s.txt 文件。"%(ble_mode,2400+chn*2-if_offset,dump_type_str),color="red")
 
     SerialPort.close()
     N5182B.close()
