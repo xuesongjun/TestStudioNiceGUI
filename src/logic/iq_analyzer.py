@@ -1,5 +1,24 @@
 import numpy as np
 import plotly.graph_objects as go
+import math
+
+def dbm_to_mv(dbm, r=50):
+    """
+    将 dBm 转换为 mV（峰峰值未计算，这里返回的是有效值 RMS）
+    :param dbm: 输入功率，单位 dBm
+    :param r: 负载电阻，默认 50Ω
+    :return: 电压，单位 mV (RMS)
+    """
+    # 1. dBm 转 mW
+    mw = 10 ** (dbm / 10)
+    # 2. mW 转 W
+    watt = mw / 1000
+    # 3. 功率转电压 Vrms
+    vrms = math.sqrt(watt * r)
+    # 4. 转为 mV
+    mv = vrms * 1000
+    return mv
+
 def analyze_iq_signal(
     Idata, Qdata,
     fs=24e6, vpp=1.1, nbit=12, R=50,sg_pwr=-70,
@@ -66,6 +85,8 @@ def analyze_iq_signal(
     # 计算直流功率
     DC_power_linear = np.sum(psd_watts[dc_left_idx:dc_right_idx])
     DC_power_dBm = 10 * np.log10(DC_power_linear + 1e-20) + 30
+
+    DC_mV = dbm_to_mv(DC_power_dBm)
 
     # ========== 信号镜像功率（直接求和积分） ==========
     image_integ_right = DC_idx*2 - left_idx
@@ -179,7 +200,7 @@ def analyze_iq_signal(
         fig.update_layout(
             title=dict(
                 text=f'Power Spectrum<br>'
-                    f'<span style="font-size: 12px;"> DC Power: {DC_power_dBm:.2f} dBm | Signal Power: {signal_power_dBm:.2f} dBm | '
+                    f'<span style="font-size: 12px;"> DC Power: {DC_mV:.2f} mV | Signal Power: {signal_power_dBm:.2f} dBm | '
                     f'Image Power: {image_power_dBm:.2f} dBm | IMRR:{IMRR_dB:.2f} dBm | '
                     f'Noise: {noise_power_dBm:.2f} dBm | SNR: {SNR_dB:.2f} dB</span>', 
                 x=0.05,  # 标题左对齐
@@ -238,7 +259,7 @@ def analyze_iq_signal(
             result.update({
                 "signal": round(signal_power_dBm, 4),
                 "gain": round(signal_power_dBm - sg_pwr,4),
-                "dc": round(DC_power_dBm, 4),
+                "dc": round(DC_mV, 4),
                 "image": round(image_power_dBm, 4),
                 "snr": round(SNR_dB, 4),
                 "imrr": round(IMRR_dB, 4)
@@ -263,7 +284,7 @@ def analyze_iq_signal(
         result.update({
             "signal": round(signal_power_dBm, 4),
             "gain": round(signal_power_dBm - sg_pwr,4),
-            "dc": round(DC_power_dBm, 4),
+            "dc": round(DC_mV, 4),
             "image": round(image_power_dBm, 4),
             "snr": round(SNR_dB, 4),
             "imrr": round(IMRR_dB, 4)

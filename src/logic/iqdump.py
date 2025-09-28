@@ -9,6 +9,7 @@ from colorama import Fore, Style
 from pages.layout import log
 from nicegui import ui
 from logic.iq_analyzer import analyze_iq_signal
+from db.db_manager import insert_test_data, query_results  # 导入数据库插入函数
 
 
 ble_if_offset_map = {
@@ -59,7 +60,7 @@ def iqdump(
         chart_update_callback=None
 ):
     # log("log INFO .................... start",color="blue")
-    # log(com_num)
+    log(com_num)
     # log(ip_str)
     # log(chn_list)
     # log(ble_modes_list)
@@ -127,14 +128,14 @@ def iqdump(
     elif(dump_type == 1):
         #log("dump tone")
         dump_type_str = "tone"
-        N5182B.write(f':FREQuency:FIXed {2400+chn*2+tone_freq} MHz')
+        #N5182B.write(f':FREQuency:FIXed {2400+chn*2+tone_freq} MHz')
         N5182B.write(':SOURce:RADio:ARB:STATe OFF')
         N5182B.write(':OUTPut:MODulation:STATe OFF')
         N5182B.write(':OUTPut:STATe ON')
     elif dump_type == 2:
         dump_type_str = "wave"
         #log("dump BLE wave")
-        N5182B.write(f':FREQuency:FIXed {2400+chn*2} MHz')
+        #N5182B.write(f':FREQuency:FIXed {2400+chn*2} MHz')
         # 设置触发方式为单次触发且重复发送1500次
         N5182B.write(':RADio:ARB:TRIGger:TYPE SINGle')
         N5182B.write(':RADio:ARB:TRIGger:TYPE:SINGle:REPeat 1500')
@@ -177,44 +178,61 @@ def iqdump(
             Qdata_dec_tmp = hex2sint_list(Qdata,12)
             
             # ========== 调用IQ数据分析 ==========
-            try:
-                log(f"开始分析IQ数据 - {ble_mode} 信道{chn} {dump_type_str}", color="blue")
-                
-                # 调用分析函数
-                analysis_result = analyze_iq_signal(
-                    Idata=Idata_dec_tmp,
-                    Qdata=Qdata_dec_tmp,
-                    fs=fs,
-                    vpp=vpp,
-                    nbit=nbit,
-                    sg_pwr=AMPTD,
-                    dump_noise=1 if dump_type == 0 else 0,
-                    figure_off=0,  # 显示图表
-                    target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6
-                )
-                
-                # 通过回调函数更新UI中的图表
-                if chart_update_callback and 'time_chart' in analysis_result and 'freq_chart' in analysis_result:
-                    try:
-                        chart_update_callback(analysis_result['time_chart'], analysis_result['freq_chart'])
-                        log("图表已更新到UI", color="blue")
-                    except Exception as chart_error:
-                        log(f"更新图表到UI时出错: {str(chart_error)}", color="red")
-                
-                # 输出分析结果
-                if dump_type == 0:  # noise
-                    log(f"噪声功率: {analysis_result.get('noise', 'N/A')} dBm", color="green")
-                else:  # tone or wave
-                    log(f"信号功率: {analysis_result.get('signal', 'N/A')} dBm", color="green")
-                    log(f"增益: {analysis_result.get('gain', 'N/A')} dB", color="green")
-                    log(f"DC功率: {analysis_result.get('dc', 'N/A')} dBm", color="green")
-                    log(f"镜像功率: {analysis_result.get('image', 'N/A')} dBm", color="green")
-                    log(f"SNR: {analysis_result.get('snr', 'N/A')} dB", color="green")
-                    log(f"IMRR: {analysis_result.get('imrr', 'N/A')} dB", color="green")
-                    
-            except Exception as e:
-                log(f"IQ数据分析出错: {str(e)}", color="red")
+            analysis_result = analyze_iq_signal(
+                Idata=Idata_dec_tmp,
+                Qdata=Qdata_dec_tmp,
+                fs=fs,
+                vpp=vpp,
+                nbit=nbit,
+                sg_pwr=AMPTD,
+                dump_noise=1 if dump_type == 0 else 0,
+                figure_off=0,  # 显示图表
+                target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6
+            )
             
+            # 通过回调函数更新UI中的图表
+            if chart_update_callback and 'time_chart' in analysis_result and 'freq_chart' in analysis_result:
+                try:
+                    chart_update_callback(analysis_result['time_chart'], analysis_result['freq_chart'])
+                    log("图表已更新到UI", color="blue")
+                except Exception as chart_error:
+                    log(f"更新图表到UI时出错: {str(chart_error)}", color="red")
+            # 获取分析结果
+            noise_val = analysis_result.get('noise')
+            signal_val = analysis_result.get('signal')
+            gain_val = analysis_result.get('gain')
+            dc_val = analysis_result.get('dc')
+            snr_val = analysis_result.get('snr')
+            image_val = analysis_result.get('image')
+            imrr_val = analysis_result.get('imrr')
+            log(f"分析结果: {noise_val}", color="green")
+            # 将结果插入数据库
+            insert_test_data(
+                table_name="ble_test_results",
+                chn=chn,
+                rate=ble_mode,
+                noise=noise_val,
+                signal=signal_val,
+                gain=gain_val,
+                dc=dc_val,
+                snr=snr_val,
+                image=image_val,
+                imrr=imrr_val,
+                nf=None,         # NF 后续可计算
+                sensitive=None   # sensitivity 可选
+            )
+            
+            # 输出分析结果
+            #log(f"分析结果: {analysis_result}", color="green")
+            # if dump_type == 0:  # noise
+            #     log(f"噪声功率: {analysis_result.get('noise', 'N/A')} dBm", color="green")
+            # else:  # tone or wave
+            #     log(f"信号功率: {analysis_result.get('signal', 'N/A')} dBm", color="green")
+            #     log(f"增益: {analysis_result.get('gain', 'N/A')} dB", color="green")
+            #     log(f"DC功率: {analysis_result.get('dc', 'N/A')} dBm", color="green")
+            #     log(f"镜像功率: {analysis_result.get('image', 'N/A')} dBm", color="green")
+            #     log(f"SNR: {analysis_result.get('snr', 'N/A')} dB", color="green")
+            #     log(f"IMRR: {analysis_result.get('imrr', 'N/A')} dB", color="green")
             #交换IQ，并拼接成新的list
             IQSWAP_HEX = [g + i + q for g, i, q in zip(gain, Qdata, Idata)]
             # 指定文件路径

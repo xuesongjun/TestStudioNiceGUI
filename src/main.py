@@ -1,6 +1,10 @@
 from nicegui import ui
 from pages.home import home_page
 from pages.settings import settings_page
+from db.db_manager import init_db  # 导入数据库初始化函数
+
+# ---------- 初始化数据库 ----------
+init_db(table_name="ble_test_results")  # 启动时自动创建表和数据库
 
 # 创建页面容器
 home_container = home_page()

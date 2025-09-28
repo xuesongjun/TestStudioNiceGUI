@@ -5,6 +5,7 @@ from logic.instrument import check_connection
 from pages.layout import log
 from logic.iqdump import iqdump
 from logic.config import ip_addr
+from logic.config import ip_addr, com_num
 import threading
 
 def home_page():
@@ -96,8 +97,10 @@ def home_page():
             
             def run_task():
                 try:
+                    log(com_num.value)
                     iqdump(
                         ip_str=ip_addr.value,
+                        com_num=int(com_num.value[3:]),
                         dump_type=dump_type.value,
                         AMPTD=signal_amptd.value,
                         cable_loss=cable_loss.value,
