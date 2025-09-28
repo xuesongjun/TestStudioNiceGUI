@@ -1,11 +1,17 @@
 from nicegui import ui
 from datetime import datetime
+import time
 
-# 全局日志区 - 使用HTML组件支持颜色
-log_area = ui.html().classes('w-full h-48 border border-gray-300 rounded p-2 overflow-y-auto bg-white font-mono text-sm')
+# 全局日志区 - 使用scroll_area组件，内置自动滚动
+with ui.scroll_area().classes('w-full h-48 border border-gray-300 rounded bg-white') as scroll_container:
+    log_area = ui.html().classes('font-mono text-sm p-2').style('padding-bottom: 20px;')
 
 # 全局开关，控制日志是否自动带时间戳
 LOG_USE_TIMESTAMP = True
+
+# 滚动防抖相关变量
+_last_scroll_time = 0
+_scroll_timer = None
 
 # 颜色映射
 COLOR_MAP = {
@@ -45,27 +51,59 @@ def log(*args, sep=' ', end='\n', file=None, flush=False, with_timestamp=None, c
 
     # --- 输出到 log_area ---  
     if log_area is not None:
-        # 获取颜色值
-        color_value = COLOR_MAP.get(color, COLOR_MAP[None])
-        
-        # 创建带颜色的HTML内容
-        html_message = f'<div style="color: {color_value}; margin: 0; padding: 0; line-height: 1.2;">{display_message}</div>'
+        def update_log_ui():
+            """在正确的UI上下文中更新log"""
+            try:
+                # 获取颜色值，如果没有指定颜色则使用默认黑色
+                color_value = COLOR_MAP.get(color, COLOR_MAP[None])
+                # 创建带颜色的HTML内容
+                html_message = f'<div style="color: {color_value}; margin: 0; padding: 0; line-height: 1.2;">{display_message}</div>'
+                
+                # 更新HTML内容
+                current_content = log_area.content if hasattr(log_area, 'content') and log_area.content else ""
+                log_area.content = current_content + html_message
+                log_area.update()
+                
+                # 立即滚动，确保实时性
+                try:
+                    scroll_container.scroll_to(percent=1.0)
+                except:
+                    pass
+                
+                # 延迟滚动确保可靠性
+                ui.timer(0.1, lambda: self_scroll(), once=True)
+                
+                def self_scroll():
+                    try:
+                        scroll_container.scroll_to(percent=1.0)
+                        # JavaScript备用滚动
+                        ui.run_javascript("""
+                            const containers = [
+                                ...document.querySelectorAll('.q-scrollarea__container'),
+                                ...document.querySelectorAll('.q-scrollarea__content')
+                            ];
+                            containers.forEach(container => {
+                                if (container.scrollHeight > container.clientHeight) {
+                                    container.scrollTop = container.scrollHeight + 200;
+                                }
+                            });
+                        """)
+                    except:
+                        pass
+            except Exception as e:
+                # 如果仍然失败，只输出到终端
+                print(f"Log UI update failed: {e}")
         
         try:
             # 尝试直接更新，如果在主线程中执行
-            current_content = log_area.content if hasattr(log_area, 'content') and log_area.content else ""
-            log_area.content = current_content + html_message
-            log_area.update()
+            update_log_ui()
         except Exception:
-            # 如果在工作线程中，使用JavaScript方式更新UI
-            js_safe_html = html_message.replace("'", "\\'").replace('"', '\\"')
-            ui.run_javascript(f"""
-                var logArea = document.querySelector('.nicegui-html');
-                if (logArea) {{
-                    logArea.innerHTML += '{js_safe_html}';
-                    logArea.scrollTop = logArea.scrollHeight;
-                }}
-            """)
+            # 如果在工作线程中，使用timer来在主线程中执行UI更新
+            try:
+                ui.timer(0.01, update_log_ui, once=True)
+            except Exception:
+                # 如果timer也失败，则跳过UI更新，只输出到终端
+                pass
 
     # --- 输出到终端 ---
     print(print_message, end=end, file=file, flush=flush)

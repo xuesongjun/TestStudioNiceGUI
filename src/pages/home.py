@@ -40,7 +40,7 @@ def home_page():
 
                 # 下方：其他控制参数（垂直排列）
                 with ui.column().classes('w-full gap-2'):
-                    dump_type = ui.select(options = {0:'noise',1:'tone',2:'wave'}, value=0,label="Dump类型").props('outlined clearable').style('min-width: 170px')
+                    dump_type = ui.select(options = {0:'noise',1:'tone',2:'wave',3:'NF'}, value=0,label="Dump类型").props('outlined clearable').style('min-width: 170px')
                     signal_amptd = ui.number(label='信号功率', value=-70,step=0.1, placeholder='输入信号功率(dBm)').props('outlined clearable debounce="500"')
                     cable_loss = ui.number(label='线损', value=0.65,step=0.01,placeholder='输入线损(dB)').props('outlined clearable debounce="500"')
 
