@@ -25,9 +25,6 @@ def settings_page():
         # 使用响应式变量存储串口列表
         available_ports = to_ref(initial_ports if initial_ports else [placeholder_option])
         
-        # 提示标签
-        no_port_label = ui.label("").classes('text-red-500 text-sm')
-        
         def update_serial_ports():
             """执行串口扫描和UI更新的逻辑"""
             current_ports = list_serial_ports()
@@ -40,8 +37,8 @@ def settings_page():
                 if not com_num.value or com_num.value not in current_ports:
                     com_num.value = current_ports[0]
                 
-                # 清除提示
-                no_port_label.text = ""
+                # 启用下拉框
+                com_select.props(remove='disabled')
                 
                 ui.notify(f'成功刷新：找到 {len(current_ports)} 个串口', type='positive')
                 
@@ -50,36 +47,29 @@ def settings_page():
                 available_ports.value = [placeholder_option]
                 com_num.value = placeholder_option
                 
-                # 显示提示
-                no_port_label.text = "未检测到可用串口设备"
+                # 禁用下拉框
+                com_select.props('disabled')
                 
                 ui.notify('未检测到可用串口设备', type='warning')
 
-        # 使用 rxui.select 并动态设置禁用属性
-        with ui.row().classes('w-full items-center gap-2'):
-            # 串口选择框：使用 rxui.select 并绑定响应式变量
-            com_select = rxui.select(
-                options=available_ports,
-                value=com_num,
-                label='串口选择'
-            ).props('outlined clearable').classes('grow')
-            
-            # 初始状态：如果没有串口则禁用
-            if not initial_ports:
-                com_select.props('disabled')
-            
-            # 刷新按钮：图标按钮，保持小巧并与下拉框对齐
-            ui.button(
-                icon='refresh', 
-                on_click=update_serial_ports
-            ).props('flat round color=primary').tooltip('刷新串口列表')
-            
-        # 初始状态配置
-        if not initial_ports:
-            no_port_label.text = "未检测到可用串口设备"
+        # 添加点击事件处理函数
+        def on_dropdown_focus():
+            """下拉框获得焦点时自动刷新串口列表"""
+            update_serial_ports()
 
-        # 将提示标签放在下拉框的下方
-        no_port_label
+        # 串口选择框：使用 rxui.select 并绑定响应式变量
+        com_select = rxui.select(
+            options=available_ports,
+            value=com_num,
+            label='串口选择'
+        ).props('outlined clearable').classes('w-full')
+        
+        # 为下拉框添加点击事件监听器
+        com_select.on('focus', on_dropdown_focus)
+        
+        # 初始状态：如果没有串口则禁用
+        if not initial_ports:
+            com_select.props('disabled')
 
         # --- IP 输入框 ---
         rxui.input(
