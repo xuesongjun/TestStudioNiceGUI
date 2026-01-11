@@ -19,3 +19,6 @@ pyserial>=3.5
 
 # 终端输出美化
 colorama>=0.4.6
+
+# Excel文件处理
+openpyxl>=3.1.0

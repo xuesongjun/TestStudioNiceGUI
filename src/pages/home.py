@@ -4,11 +4,13 @@ from components.GeneralSelector import GeneralSelector
 from logic.instrument import check_connection
 from pages.layout import log, notify
 from logic.iqdump import iqdump, SerialPortError
+from logic.gain_sweep import gain_sweep, GainSweepError, create_auto_config
 from logic.config import ip_addr, com_num, dut_id, batch_id, fs, SN, vpp, nbit, dump_file_path
 from logic.iq_file_parser import parse_iq_file, list_iq_files
 from utils.file_dialog import select_file
 import threading
 import os
+from datetime import datetime
 
 def home_page():
     # 创建任务状态引用
@@ -73,6 +75,43 @@ def home_page():
                         icon='folder_open',
                         on_click=lambda: browse_and_redraw(),
                         color='purple'
+                    ).classes('w-full')
+
+                    # 分隔线 - 批量增益测试
+                    ui.separator().classes('my-2')
+                    ui.label('批量增益测试').classes('text-sm font-bold')
+
+                    # 增益配置文件选择
+                    gain_config_file = to_ref("")
+                    gain_config_label = ui.label('未选择配置文件').classes('text-xs text-gray-500')
+
+                    with ui.row().classes('w-full gap-2'):
+                        ui.button(
+                            "选择配置",
+                            icon='folder_open',
+                            on_click=lambda: select_gain_config(),
+                            color='orange'
+                        ).classes('flex-1')
+
+                        ui.button(
+                            "生成配置",
+                            icon='auto_fix_high',
+                            on_click=lambda: show_auto_config_dialog(),
+                            color='teal'
+                        ).classes('flex-1')
+
+                    # 测试信道选择（单选）
+                    gain_test_chn = ui.number(label='测试信道', value=19, min=0, max=39, step=1).props('outlined').classes('w-full')
+
+                    # 单音频偏
+                    gain_tone_freq = ui.number(label='单音频偏(MHz)', value=1.0, step=0.1).props('outlined').classes('w-full')
+
+                    # 开始批量增益测试按钮
+                    ui.button(
+                        "开始批量增益测试",
+                        icon='play_arrow',
+                        on_click=lambda: start_gain_sweep(),
+                        color='teal'
                     ).classes('w-full')
             
             # 右侧图表区域 - 垂直排列，占据大部分空间
@@ -180,6 +219,183 @@ def home_page():
 
             except Exception as e:
                 log(f'选择文件失败: {str(e)}', color='red')
+
+        # 选择增益配置文件
+        def select_gain_config():
+            try:
+                file_path = select_file(
+                    title="选择增益配置文件",
+                    filetypes=[("Excel文件", "*.xlsx"), ("所有文件", "*.*")]
+                )
+                if file_path:
+                    gain_config_file.value = file_path
+                    gain_config_label.text = f'已选择: {os.path.basename(file_path)}'
+                    log(f'已选择配置文件: {file_path}', color='blue')
+            except Exception as e:
+                log(f'选择文件失败: {e}', color='red')
+
+        # 创建示例配置文件
+        def show_auto_config_dialog():
+            """显示自动生成配置的对话框"""
+            dialog = ui.dialog().props('persistent')
+            with dialog, ui.card().classes('w-auto'):
+                ui.label('自动生成增益配置').classes('text-lg font-bold mb-2')
+                ui.label('增益 = 基准 + 控制字 × 步进').classes('text-xs text-gray-500 mb-2')
+
+                # 表头
+                with ui.row().classes('w-full gap-2 items-center'):
+                    ui.label('').classes('w-12')
+                    ui.label('最小').classes('flex-1 text-center text-xs')
+                    ui.label('最大').classes('flex-1 text-center text-xs')
+                    ui.label('基准(dB)').classes('flex-1 text-center text-xs')
+                    ui.label('步进(dB)').classes('flex-1 text-center text-xs')
+
+                # LNA配置
+                with ui.row().classes('w-full gap-2 items-center'):
+                    ui.label('LNA:').classes('w-12')
+                    lna_min = ui.number(value=0, min=0, max=15).props('dense outlined').classes('flex-1')
+                    lna_max = ui.number(value=8, min=0, max=15).props('dense outlined').classes('flex-1')
+                    lna_base = ui.number(value=0, step=1).props('dense outlined').classes('flex-1')
+                    lna_step_db = ui.number(value=3, min=0.5, max=10, step=0.5).props('dense outlined').classes('flex-1')
+
+                # TIA配置
+                with ui.row().classes('w-full gap-2 items-center'):
+                    ui.label('TIA:').classes('w-12')
+                    tia_min = ui.number(value=0, min=0, max=15).props('dense outlined').classes('flex-1')
+                    tia_max = ui.number(value=4, min=0, max=15).props('dense outlined').classes('flex-1')
+                    tia_base = ui.number(value=0, step=1).props('dense outlined').classes('flex-1')
+                    tia_step_db = ui.number(value=3, min=0.5, max=10, step=0.5).props('dense outlined').classes('flex-1')
+
+                # BBF配置
+                with ui.row().classes('w-full gap-2 items-center'):
+                    ui.label('BBF:').classes('w-12')
+                    bbf_min = ui.number(value=0, min=0, max=15).props('dense outlined').classes('flex-1')
+                    bbf_max = ui.number(value=4, min=0, max=15).props('dense outlined').classes('flex-1')
+                    bbf_base = ui.number(value=0, step=1).props('dense outlined').classes('flex-1')
+                    bbf_step_db = ui.number(value=2, min=0.5, max=10, step=0.5).props('dense outlined').classes('flex-1')
+
+                # PGA配置
+                with ui.row().classes('w-full gap-2 items-center'):
+                    ui.label('PGA:').classes('w-12')
+                    pga_min = ui.number(value=0, min=0, max=15).props('dense outlined').classes('flex-1')
+                    pga_max = ui.number(value=4, min=0, max=15).props('dense outlined').classes('flex-1')
+                    pga_base = ui.number(value=0, step=1).props('dense outlined').classes('flex-1')
+                    pga_step_db = ui.number(value=2, min=0.5, max=10, step=0.5).props('dense outlined').classes('flex-1')
+
+                # 目标输出功率
+                target_output = ui.number(label='目标输出功率(dBm)', value=-5.0, step=0.5).props('outlined').classes('w-full mt-2')
+
+                # 按钮
+                with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                    ui.button('取消', on_click=dialog.close, color='gray')
+
+                    def generate_config():
+                        try:
+                            sample_dir = os.path.join(os.getcwd(), "data")
+                            os.makedirs(sample_dir, exist_ok=True)
+                            sample_path = os.path.join(sample_dir, f"gain_config_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+
+                            create_auto_config(
+                                file_path=sample_path,
+                                lna_range=(int(lna_min.value), int(lna_max.value)),
+                                tia_range=(int(tia_min.value), int(tia_max.value)),
+                                bbf_range=(int(bbf_min.value), int(bbf_max.value)),
+                                pga_range=(int(pga_min.value), int(pga_max.value)),
+                                lna_base_db=float(lna_base.value),
+                                lna_step_db=float(lna_step_db.value),
+                                tia_base_db=float(tia_base.value),
+                                tia_step_db=float(tia_step_db.value),
+                                bbf_base_db=float(bbf_base.value),
+                                bbf_step_db=float(bbf_step_db.value),
+                                pga_base_db=float(pga_base.value),
+                                pga_step_db=float(pga_step_db.value),
+                                target_output_dbm=float(target_output.value)
+                            )
+
+                            # 自动选择生成的文件
+                            gain_config_file.value = sample_path
+                            gain_config_label.text = f'已选择: {os.path.basename(sample_path)}'
+
+                            notify(f"配置文件已生成: {sample_path}", type='positive')
+                            dialog.close()
+                        except Exception as e:
+                            log(f'生成配置文件失败: {e}', color='red')
+                            notify(f"生成失败: {e}", type='negative')
+
+                    ui.button('生成', on_click=generate_config, color='primary')
+
+            dialog.open()
+
+        # 开始批量增益测试
+        def start_gain_sweep():
+            if is_running.value:
+                log("测试任务正在运行中，请等待完成后再开始新任务")
+                notify("任务正在运行中", type='warning')
+                return
+
+            if not gain_config_file.value:
+                log("请先选择增益配置文件", color="yellow")
+                notify("请先选择增益配置文件", type='warning')
+                return
+
+            # 更新状态
+            is_running.value = True
+            status_label.text = '正在执行批量增益测试...'
+            status_label.classes(remove='text-green-600', add='text-blue-600')
+
+            def update_charts(time_fig, freq_fig):
+                """在主线程中更新图表的回调函数"""
+                time_chart_container.figure = time_fig
+                freq_chart_container.figure = freq_fig
+                time_chart_container.update()
+                freq_chart_container.update()
+
+            def run_gain_sweep_task():
+                error_msg = None
+                try:
+                    # 生成输出文件名
+                    output_dir = os.path.join(os.getcwd(), "data", "gain_results")
+                    os.makedirs(output_dir, exist_ok=True)
+                    output_file = os.path.join(
+                        output_dir,
+                        f"gain_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                    )
+
+                    # 获取选中的 BLE 制式
+                    selected_ble_modes = ble_format_selector.get_selected_list()
+                    ble_mode = selected_ble_modes[0] if selected_ble_modes else "LE1M"
+
+                    gain_sweep(
+                        config_file=gain_config_file.value,
+                        ip_str=ip_addr.value,
+                        com_num=int(com_num.value[3:]),
+                        fs=fs.value,
+                        SN=int(SN.value),
+                        vpp=vpp.value,
+                        nbit=int(nbit.value),
+                        cable_loss=cable_loss.value,
+                        tone_freq=gain_tone_freq.value,
+                        chn=int(gain_test_chn.value),
+                        ble_mode=ble_mode,
+                        output_file=output_file,
+                        chart_update_callback=update_charts
+                    )
+                    notify(f"测试完成，结果已保存", type='positive')
+                except GainSweepError as e:
+                    error_msg = str(e)
+                    log(f"增益测试错误: {error_msg}", color="red")
+                except Exception as e:
+                    error_msg = str(e)
+                    log(f"测试过程中发生错误: {error_msg}", color="red")
+                finally:
+                    is_running.value = False
+                    status_label.text = '测试完成'
+                    status_label.classes(remove='text-blue-600', add='text-green-600')
+                    log("批量增益测试完成")
+                    if error_msg:
+                        notify(error_msg, type='negative')
+
+            threading.Thread(target=run_gain_sweep_task, daemon=True).start()
 
         # 封装开始测试的逻辑
         def start_dump():
