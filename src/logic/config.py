@@ -1,15 +1,30 @@
 from ex4nicegui import to_ref
+from datetime import datetime
+import os
 
 # 网络配置
 ip_addr = to_ref("")  # VISA仪器IP地址
 
 # 串口配置
-com_num = to_ref("")  # 串口号，默认空字符串
+com_num = to_ref("")  # 串口号,默认空字符串
+
+# DUT和批次信息
+dut_id = to_ref("")  # DUT编号,如 #3, #4
+batch_id = to_ref(datetime.now().strftime("%Y%m%d_%H%M"))  # 批次编号,默认当前时间
 
 # 测试参数默认值
 default_signal_amptd = to_ref(-70)  # 默认信号功率(dBm)
 default_cable_loss = to_ref(0.65)   # 默认线损(dB)
 default_dump_type = to_ref(0)       # 默认Dump类型: 0=noise, 1=tone, 2=wave
+
+# IQ 数据采集参数
+fs = to_ref(24e6)  # 采样率(Hz)
+SN = to_ref(4096)  # 采样点数
+vpp = to_ref(1.1)  # ADC参考电压峰峰值(V)
+nbit = to_ref(12)  # ADC位数
+
+# 文件存储配置
+dump_file_path = to_ref(os.path.join(os.getcwd(), "data", "iq_dumps"))  # IQ dump文件存放路径
 
 # 信道配置
 channel_count = 40  # 总信道数量

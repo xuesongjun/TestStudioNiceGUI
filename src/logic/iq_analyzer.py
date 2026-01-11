@@ -24,7 +24,8 @@ def analyze_iq_signal(
     fs=24e6, vpp=1.1, nbit=12, R=50,sg_pwr=-70,
     integ_bins=10, DC_bins=10, dump_noise =0,figure_off=1,
     target_tone_freq=1e6, target_tone_search_span=0.2e6,
-    noise_integ_start_freq=0.5e6, noise_integ_stop_freq=1.5e6
+    noise_integ_start_freq=0.5e6, noise_integ_stop_freq=1.5e6,
+    chn=None, ble_mode=None
 ):
 
     # ========== IQ 数据输入 ==========
@@ -196,13 +197,22 @@ def analyze_iq_signal(
             line_width=0
         )
     
+        # 构建标题文本
+        title_text = 'Power Spectrum'
+        if chn is not None and ble_mode is not None:
+            freq_mhz = 2400 + chn * 2
+            title_text = f'Power Spectrum - Chn:{freq_mhz}MHz ({ble_mode})'
+        elif chn is not None:
+            freq_mhz = 2400 + chn * 2
+            title_text = f'Power Spectrum - Chn:{freq_mhz}MHz'
+
         # 图表布局优化
         fig.update_layout(
             title=dict(
-                text=f'Power Spectrum<br>'
+                text=f'{title_text}<br>'
                     f'<span style="font-size: 12px;"> DC Power: {DC_mV:.2f} mV | Signal Power: {signal_power_dBm:.2f} dBm | '
                     f'Image Power: {image_power_dBm:.2f} dBm | IMRR:{IMRR_dB:.2f} dBm | '
-                    f'Noise: {noise_power_dBm:.2f} dBm | SNR: {SNR_dB:.2f} dB</span>', 
+                    f'Noise: {noise_power_dBm:.2f} dBm | SNR: {SNR_dB:.2f} dB | Gain: {round(signal_power_dBm - sg_pwr,2)} dB</span>',
                 x=0.05,  # 标题左对齐
                 xanchor='left'
             ),

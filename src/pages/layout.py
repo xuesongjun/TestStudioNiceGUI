@@ -4,7 +4,7 @@ import time
 
 # 全局日志区 - 使用scroll_area组件，内置自动滚动
 with ui.scroll_area().classes('w-full h-48 border border-gray-300 rounded bg-white') as scroll_container:
-    log_area = ui.html().classes('font-mono text-sm p-2').style('padding-bottom: 20px;')
+    log_area = ui.html(sanitize=False).classes('font-mono text-sm p-2').style('padding-bottom: 20px;')
 
 # 全局开关，控制日志是否自动带时间戳
 LOG_USE_TIMESTAMP = True
@@ -59,10 +59,11 @@ def log(*args, sep=' ', end='\n', file=None, flush=False, with_timestamp=None, c
                 # 创建带颜色的HTML内容
                 html_message = f'<div style="color: {color_value}; margin: 0; padding: 0; line-height: 1.2;">{display_message}</div>'
                 
-                # 更新HTML内容
-                current_content = log_area.content if hasattr(log_area, 'content') and log_area.content else ""
-                log_area.content = current_content + html_message
-                log_area.update()
+                # 在正确的UI上下文中更新HTML内容
+                with scroll_container:
+                    current_content = log_area.content if hasattr(log_area, 'content') and log_area.content else ""
+                    log_area.content = current_content + html_message
+                    log_area.update()
                 
                 # 立即滚动，确保实时性
                 try:
@@ -95,15 +96,11 @@ def log(*args, sep=' ', end='\n', file=None, flush=False, with_timestamp=None, c
                 print(f"Log UI update failed: {e}")
         
         try:
-            # 尝试直接更新，如果在主线程中执行
-            update_log_ui()
+            # 始终使用timer来在主UI线程中执行更新，避免线程问题
+            ui.timer(0.01, update_log_ui, once=True)
         except Exception:
-            # 如果在工作线程中，使用timer来在主线程中执行UI更新
-            try:
-                ui.timer(0.01, update_log_ui, once=True)
-            except Exception:
-                # 如果timer也失败，则跳过UI更新，只输出到终端
-                pass
+            # 如果timer失败，则跳过UI更新，只输出到终端
+            pass
 
     # --- 输出到终端 ---
     print(print_message, end=end, file=file, flush=flush)

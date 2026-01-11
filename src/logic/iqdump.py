@@ -36,9 +36,9 @@ def calculate_nf(gain_dB, noise_power_dBm, bandwidth_Hz=1e6, temperature_K=290):
     
     # 显示中间步骤（可选）
     log(f"带宽: {bandwidth_Hz/1e6:.2f} MHz", color="cyan")
-    log(f"热噪声底: {thermal_noise_dBm:.2f} dBm", color="cyan")
     log(f"理想输出噪声: {ideal_output_noise_dBm:.2f} dBm", color="cyan")
     log(f"测得输出噪声: {noise_power_dBm:.2f} dBm", color="cyan")
+    log(f"测得增益：{gain_dB:.2f} dB")
     log(f"噪声系数 NF: {NF_dB:.2f} dB", color="cyan")
     
     return NF_dB
@@ -83,16 +83,27 @@ def iqdump(
         com_num:int=46,
         buand:int=115200,
         cable_loss:float=0.65,
-        AMPTD:float=-70,
+        AMPTD:float=-80,
         vpp:float=1.1,
         nbit:int=12,
         dump_type:int=0,
         chn_list:list[int]=list(range(40)),
         ble_modes_list:list[str]=list(["LE1M","LE2M","LES2","LES8"]),
-        chart_update_callback=None
+        chart_update_callback=None,
+        dut_id:str="",
+        batch_id:str="",
+        save_file_path:str=""
 ):
     # log("log INFO .................... start",color="blue")
     log(com_num)
+
+    # 设置默认文件保存路径
+    import os
+    if not save_file_path:
+        save_file_path = os.path.join(os.getcwd(), "data", "iq_dumps")
+
+    # 确保保存目录存在
+    os.makedirs(save_file_path, exist_ok=True)
     # log(ip_str)
     # log(chn_list)
     # log(ble_modes_list)
@@ -178,7 +189,7 @@ def iqdump(
         N5182B.write(':OUTPut:STATe ON')
     elif dump_type == 3:
         dump_type_str = "NF"
-        log("开始NF测试：先进行Noise测试，再进行Tone测试")
+        #log("开始NF测试：先进行Noise测试，再进行Tone测试")
         # NF测试需要先配置为tone模式的设备设置
         N5182B.write(':SOURce:RADio:ARB:STATe OFF')
         N5182B.write(':OUTPut:MODulation:STATe OFF')
@@ -195,13 +206,13 @@ def iqdump(
             
             # NF测试需要进行两次dump：先noise后tone
             if dump_type == 3:  # NF测试
-                log(f"开始NF测试 - 信道{chn}, 制式{ble_mode}")
+                log(f"开始NF测试：信道{chn}, 制式{ble_mode}")
                 
                 # ========== 第一步：Noise Dump ==========
                 log("第一步：进行Noise测试")
                 N5182B.write(':OUTPut:STATe OFF')  # 关闭输出进行noise测试
                 
-                log(f'amtBleRxStartInf {rate_num} {chn}')
+                #log(f'amtBleRxStartInf {rate_num} {chn}')
                 SerialPort.write_cmd(f'amtBleRxStartInf {rate_num} {chn}')
                 N5182B.write('*TRG')
                 SerialPort.write_cmd(f'amtbleiqdump 0 0 0x7fff 0x3a98')
@@ -219,26 +230,38 @@ def iqdump(
                 Qdata_noise = [hex_value[5:8] for hex_value in hex_list]
                 Idata_dec_noise = hex2sint_list(Idata_noise, 12)
                 Qdata_dec_noise = hex2sint_list(Qdata_noise, 12)
-                
+                # 保存Noise数据到文件
+                IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_noise, Qdata_noise, Idata_noise)]
+                file_path = os.path.join(save_file_path, f'iqdata_{ble_mode}_{2400+chn*2-if_offset}_Noise.txt')
+                with open(file_path, 'w') as file:
+                    for item in IQSWAP_HEX:
+                        file.write(item + '\n')
+                log("数据已成功写入 iqdata_%s_%d_%s.txt 文件。"%(ble_mode,2400+chn*2-if_offset,"Noise"),color="red")
                 # 分析noise数据
                 noise_analysis = analyze_iq_signal(
                     Idata=Idata_dec_noise,
                     Qdata=Qdata_dec_noise,
                     fs=fs, vpp=vpp, nbit=nbit, sg_pwr=AMPTD,
                     dump_noise=1,  # noise模式
-                    figure_off=1,  # 不显示图表，只获取数据
-                    target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6
+                    figure_off=0,  # 不显示图表,只获取数据
+                    target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6,
+                    chn=chn,
+                    ble_mode=ble_mode
                 )
+                # 通过回调函数更新UI中的图表（使用tone的图表）
+                if chart_update_callback and 'time_chart' in noise_analysis and 'freq_chart' in noise_analysis:
+                    try:
+                        chart_update_callback(noise_analysis['time_chart'], noise_analysis['freq_chart'])
+                        #log("图表已更新到UI", color="blue")
+                    except Exception as chart_error:
+                        log(f"更新图表到UI时出错: {str(chart_error)}", color="red")
                 noise_power = noise_analysis.get('noise')
                 log(f"Noise功率: {noise_power} dBm", color="blue")
                 
                 # ========== 第二步：Tone Dump ==========
                 log("第二步：进行Tone测试")
                 N5182B.write(':OUTPut:STATe ON')  # 打开输出进行tone测试
-                
-                log(f'amtBleRxStartInf {rate_num} {chn}')
                 SerialPort.write_cmd(f'amtBleRxStartInf {rate_num} {chn}')
-                N5182B.write('*TRG')
                 SerialPort.write_cmd(f'amtbleiqdump 0 0 0x7fff 0x3a98')
                 time.sleep(0.1)
                 SerialPort.write_reg(0x2020e000,0x0)
@@ -254,6 +277,13 @@ def iqdump(
                 Qdata_tone = [hex_value[5:8] for hex_value in hex_list]
                 Idata_dec_tone = hex2sint_list(Idata_tone, 12)
                 Qdata_dec_tone = hex2sint_list(Qdata_tone, 12)
+                # 保存Tone数据到文件
+                IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_tone, Qdata_tone, Idata_tone)]
+                file_path = os.path.join(save_file_path, f'iqdata_{ble_mode}_{2400+chn*2-if_offset}_Tone.txt')
+                with open(file_path, 'w') as file:
+                    for item in IQSWAP_HEX:
+                        file.write(item + '\n')
+                log("数据已成功写入 iqdata_%s_%d_%s.txt 文件。"%(ble_mode,2400+chn*2-if_offset,"Tone"),color="red")
                 
                 # 分析tone数据
                 tone_analysis = analyze_iq_signal(
@@ -262,21 +292,21 @@ def iqdump(
                     fs=fs, vpp=vpp, nbit=nbit, sg_pwr=AMPTD,
                     dump_noise=0,  # tone模式
                     figure_off=0,  # 显示图表
-                    target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6
+                    target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6,
+                    chn=chn,
+                    ble_mode=ble_mode
                 )
                 
                 # 通过回调函数更新UI中的图表（使用tone的图表）
                 if chart_update_callback and 'time_chart' in tone_analysis and 'freq_chart' in tone_analysis:
                     try:
                         chart_update_callback(tone_analysis['time_chart'], tone_analysis['freq_chart'])
-                        log("图表已更新到UI", color="blue")
+                        #log("图表已更新到UI", color="blue")
                     except Exception as chart_error:
                         log(f"更新图表到UI时出错: {str(chart_error)}", color="red")
                 
                 signal_power = tone_analysis.get('signal')
                 signal_gain = tone_analysis.get('gain')
-                log(f"Signal功率: {signal_power} dBm", color="blue")
-                log(f"Signal增益: {signal_gain} dB", color="blue")
                 
                 # ========== 第三步：计算NF ==========
                 if noise_power is not None and signal_gain is not None:
@@ -308,6 +338,8 @@ def iqdump(
                 # 将结果插入数据库
                 insert_test_data(
                     table_name="ble_test_results",
+                    dut_id=dut_id,
+                    batch_id=batch_id,
                     chn=chn,
                     rate=ble_mode,
                     noise=noise_power,
@@ -320,14 +352,6 @@ def iqdump(
                     nf=nf_value,
                     sensitive=None
                 )
-                
-                # 保存文件（使用tone的数据）
-                IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_tone, Qdata_tone, Idata_tone)]
-                file_path = r'C:\workspace\ECW6700\MPW\tools\ECR6600_6600U_6630 Configuration Software1.0.0-IQswaq\ECR6600_6600U_6630 Configuration Software1.0.0\builds\ECR6600series Configuration Software1.0.2\RX Dump\iqdata_%s_%d_%s.txt'%(ble_mode,2400+chn*2-if_offset,dump_type_str)
-                with open(file_path, 'w') as file:
-                    for item in IQSWAP_HEX:
-                        file.write(item + '\n')
-                log("数据已成功写入 iqdata_%s_%d_%s.txt 文件。"%(ble_mode,2400+chn*2-if_offset,dump_type_str),color="red")
                 
             else:  # 原有的单次dump逻辑
                 if(dump_type == 0):
@@ -363,7 +387,9 @@ def iqdump(
                     sg_pwr=AMPTD,
                     dump_noise=1 if dump_type == 0 else 0,
                     figure_off=0,  # 显示图表
-                    target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6
+                    target_tone_freq=tone_freq*1e6 if tone_freq > 0 else 1e6,
+                    chn=chn,
+                    ble_mode=ble_mode
                 )
                 
                 # 通过回调函数更新UI中的图表
@@ -385,6 +411,8 @@ def iqdump(
                 # 将结果插入数据库
                 insert_test_data(
                     table_name="ble_test_results",
+                    dut_id=dut_id,
+                    batch_id=batch_id,
                     chn=chn,
                     rate=ble_mode,
                     noise=noise_val,
@@ -401,8 +429,8 @@ def iqdump(
                 #交换IQ，并拼接成新的list
                 IQSWAP_HEX = [g + i + q for g, i, q in zip(gain, Qdata, Idata)]
                 # 指定文件路径
-                file_path = r'C:\workspace\ECW6700\MPW\tools\ECR6600_6600U_6630 Configuration Software1.0.0-IQswaq\ECR6600_6600U_6630 Configuration Software1.0.0\builds\ECR6600series Configuration Software1.0.2\RX Dump\iqdata_%s_%d_%s.txt'%(ble_mode,2400+chn*2-if_offset,dump_type_str)
-                
+                file_path = os.path.join(save_file_path, f'iqdata_{ble_mode}_{2400+chn*2-if_offset}_{dump_type_str}.txt')
+
                 # 将 iqdata 列表写入文件
                 with open(file_path, 'w') as file:
                     for item in IQSWAP_HEX:

@@ -196,8 +196,23 @@ $RECYCLE.BIN/
 # Linux
 *~
 
-# Project specific
+# Project specific files and directories
 result/
-data/
-*.txt
+
+# 数据文件目录（包含 IQ dump 数据）
+data/iq_dumps/
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+
+# 测试数据和临时文件
+*.iqdata
+*.dump
+
+# 日志文件
 *.log
+
+# 保留重要的配置文件
+!requirements.txt
+!README.txt
+!LICENSE.txt
