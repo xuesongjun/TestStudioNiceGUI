@@ -2,8 +2,8 @@ from nicegui import ui
 from ex4nicegui import to_ref, rxui
 from components.GeneralSelector import GeneralSelector
 from logic.instrument import check_connection
-from pages.layout import log
-from logic.iqdump import iqdump
+from pages.layout import log, notify
+from logic.iqdump import iqdump, SerialPortError
 from logic.config import ip_addr, com_num, dut_id, batch_id, fs, SN, vpp, nbit, dump_file_path
 from logic.iq_file_parser import parse_iq_file, list_iq_files
 from utils.file_dialog import select_file
@@ -212,6 +212,7 @@ def home_page():
                 freq_chart_container.update()
             
             def run_task():
+                error_msg = None
                 try:
                     log(com_num.value)
                     iqdump(
@@ -231,15 +232,21 @@ def home_page():
                         batch_id=batch_id.value,
                         save_file_path=dump_file_path.value
                     )
+                except SerialPortError as e:
+                    error_msg = str(e)
+                    log(f"串口错误: {error_msg}", color="red")
                 except Exception as e:
-                    log(f"测试过程中发生错误: {str(e)}")
+                    error_msg = str(e)
+                    log(f"测试过程中发生错误: {error_msg}")
                 finally:
                     # 测试完成后更新状态
                     is_running.value = False
                     status_label.text = '测试完成'
                     status_label.classes(remove='text-blue-600', add='text-green-600')
-                    # 在后台线程中，通过log函数来处理UI更新，它已经处理了线程安全问题
                     log("任务执行完成")
+                    # 如果有错误，发送通知
+                    if error_msg:
+                        notify(error_msg, type='negative')
             # 启动新线程执行任务
             threading.Thread(target=run_task, daemon=True).start()
 

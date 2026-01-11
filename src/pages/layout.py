@@ -1,6 +1,10 @@
 from nicegui import ui
 from datetime import datetime
 import time
+from queue import Queue
+
+# 通知队列 - 用于跨线程传递通知
+_notify_queue = Queue()
 
 # 全局日志区 - 使用scroll_area组件，内置自动滚动
 with ui.scroll_area().classes('w-full h-48 border border-gray-300 rounded bg-white') as scroll_container:
@@ -104,3 +108,36 @@ def log(*args, sep=' ', end='\n', file=None, flush=False, with_timestamp=None, c
 
     # --- 输出到终端 ---
     print(print_message, end=end, file=file, flush=flush)
+
+
+def notify(message: str, type: str = 'info', position: str = 'top', timeout: int = 5000):
+    """
+    线程安全的通知函数，可以在后台线程中调用
+    将通知放入队列，由定时器在 UI 上下文中处理
+    """
+    _notify_queue.put({
+        'message': message,
+        'type': type,
+        'position': position,
+        'timeout': timeout
+    })
+
+
+def _process_notify_queue():
+    """处理通知队列中的消息"""
+    while not _notify_queue.empty():
+        try:
+            item = _notify_queue.get_nowait()
+            ui.notify(
+                item['message'],
+                type=item['type'],
+                position=item['position'],
+                timeout=item['timeout']
+            )
+        except Exception as e:
+            print(f"Process notify failed: {e}")
+
+
+def init_notify_timer():
+    """初始化通知定时器，需要在页面创建后调用"""
+    ui.timer(0.1, _process_notify_queue)

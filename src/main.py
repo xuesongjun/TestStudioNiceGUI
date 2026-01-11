@@ -2,10 +2,14 @@ from nicegui import ui
 from pages.home import home_page
 from pages.settings import settings_page
 from pages.data_view import data_view_page
+from pages.layout import init_notify_timer
 from db.db_manager import init_db  # 导入数据库初始化函数
 
 # ---------- 初始化数据库 ----------
 init_db(table_name="ble_test_results")  # 启动时自动创建表和数据库
+
+# 初始化通知定时器
+init_notify_timer()
 
 # 创建页面容器
 home_container = home_page()

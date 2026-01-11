@@ -7,9 +7,13 @@ import serial #必须导入 不然捕获异常出错
 import plotly.graph_objects as go
 from colorama import Fore, Style
 from pages.layout import log
-from nicegui import ui
 from logic.iq_analyzer import analyze_iq_signal
 from db.db_manager import insert_test_data, query_results  # 导入数据库插入函数
+
+
+class SerialPortError(Exception):
+    """串口相关错误"""
+    pass
 
 
 def calculate_nf(gain_dB, noise_power_dBm, bandwidth_Hz=1e6, temperature_K=290):
@@ -151,17 +155,21 @@ def iqdump(
         SerialPort = None
         SerialPort = serial_lib.SerialCommunication(com_num,buand)
     except serial.SerialException as se:
-        if "PermissionError" in str(se): 
-            log(f"COM{com_num}正在被其他程序占用")
-            raise SystemExit
-        elif "FileNotFoundError" in str(se):
-            log(f"未发现COM{com_num}串口")
-            raise SystemExit
+        se_str = str(se)
+        if "PermissionError" in se_str or "Access is denied" in se_str:
+            msg = f"COM{com_num} 被占用，请关闭其他使用该串口的程序（如串口调试工具、其他终端等）"
+        elif "FileNotFoundError" in se_str or "could not open port" in se_str.lower():
+            msg = f"未发现 COM{com_num} 串口，请检查设备连接或在设置页面选择正确的串口"
+        else:
+            msg = f"串口错误: {se}"
+        log(msg, color="red")
+        raise SerialPortError(msg)
     except Exception as e:
-        log(f"发生未知错误: {e}")
-        raise SystemExit
+        msg = f"打开串口时发生未知错误: {e}"
+        log(msg, color="red")
+        raise SerialPortError(msg)
     else:
-        log("打开串口")
+        log("打开串口成功")
         SerialPort.write_cmd('echoclose 0')
 
     N5182B.write(f':POWer:LEVel {AMPTD+cable_loss} dBm')

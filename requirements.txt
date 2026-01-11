@@ -12,6 +12,7 @@ plotly>=5.18.0
 
 # 仪器控制
 pyvisa>=1.13.0
+pyvisa-py>=0.7.0
 
 # 串口通信
 pyserial>=3.5
