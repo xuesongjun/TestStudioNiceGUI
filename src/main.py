@@ -2,6 +2,7 @@ from nicegui import ui
 from pages.home import home_page
 from pages.settings import settings_page
 from pages.data_view import data_view_page
+from pages.ble_per import ble_per_page
 from pages.layout import init_notify_timer
 from db.db_manager import init_db  # 导入数据库初始化函数
 
@@ -15,27 +16,38 @@ init_notify_timer()
 home_container = home_page()
 settings_container = settings_page()
 data_view_container = data_view_page()
+ble_per_container = ble_per_page()
 
 # 初始显示首页
 home_container.visible = True
 settings_container.visible = False
 data_view_container.visible = False
+ble_per_container.visible = False
 
 # 切换函数
 def show_home():
     home_container.visible = True
     settings_container.visible = False
     data_view_container.visible = False
+    ble_per_container.visible = False
 
 def show_settings():
     home_container.visible = False
     settings_container.visible = True
     data_view_container.visible = False
+    ble_per_container.visible = False
 
 def show_data_view():
     home_container.visible = False
     settings_container.visible = False
     data_view_container.visible = True
+    ble_per_container.visible = False
+
+def show_ble_per():
+    home_container.visible = False
+    settings_container.visible = False
+    data_view_container.visible = False
+    ble_per_container.visible = True
 
 # 顶部导航栏
 with ui.header().classes('bg-blue-600 text-white'):
@@ -43,6 +55,7 @@ with ui.header().classes('bg-blue-600 text-white'):
         ui.label('Test Studio').classes('text-xl font-bold')
         with ui.row().classes('gap-4'):
             ui.button('首页', on_click=show_home).props('icon=home flat')
+            ui.button('BLE PER', on_click=show_ble_per).props('icon=signal_cellular_alt flat')
             ui.button('数据查看', on_click=show_data_view).props('icon=table_chart flat')
             ui.button('设置', on_click=show_settings).props('icon=settings flat')
 

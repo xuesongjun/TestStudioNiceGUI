@@ -71,8 +71,9 @@ def load_gain_config(file_path: str) -> list:
     if not os.path.exists(file_path):
         raise GainSweepError(f"配置文件不存在: {file_path}")
 
+    wb = None
     try:
-        wb = load_workbook(file_path, read_only=True)
+        wb = load_workbook(file_path, read_only=True, data_only=True)
         ws = wb.active
 
         configs = []
@@ -94,12 +95,14 @@ def load_gain_config(file_path: str) -> list:
 
             configs.append((lna, tia, bbf, pga, signal_power, gain_word))
 
-        wb.close()
         log(f"成功加载 {len(configs)} 个增益配置", color="green")
         return configs
 
     except Exception as e:
         raise GainSweepError(f"读取配置文件失败: {e}")
+    finally:
+        if wb is not None:
+            wb.close()
 
 
 def hex2sint_list(hex_string_list, bits):
@@ -130,7 +133,9 @@ def gain_sweep(
     ble_mode: str = "LE1M",
     output_file: str = None,
     progress_callback=None,
-    chart_update_callback=None
+    chart_update_callback=None,
+    result_callback=None,
+    stop_flag=None
 ) -> list:
     """
     批量增益扫描测试
@@ -145,15 +150,23 @@ def gain_sweep(
         vpp: ADC参考电压
         nbit: ADC位数
         cable_loss: 线损
-        tone_freq: 单音频偏(MHz)
+        tone_freq: 单音频偏(MHz) - 已废弃，实际使用中频（LE1M/LES2/LES8=1MHz, LE2M=2MHz）
         chn: 测试信道
         ble_mode: BLE制式
         output_file: 输出结果文件路径
         progress_callback: 进度回调函数 (current, total, message)
         chart_update_callback: 图表更新回调函数
+        result_callback: 结果回调函数 (lna, tia, bbf, pga, measured_gain)
+        stop_flag: 停止标志，callable返回True时停止测试
 
     返回:
         测试结果列表 [(lna, tia, bbf, pga, signal_power, gain_word, measured_gain, signal_dBm, noise_dBm), ...]
+
+    说明:
+        接收机为低中频架构：
+        - LE1M/LES2/LES8: Lo比信道低1MHz，中频=1MHz
+        - LE2M: Lo比信道低2MHz，中频=2MHz
+        信号源频率设置为信道实际频率，单音功率在中频处测量
     """
     # 加载配置
     configs = load_gain_config(config_file)
@@ -166,6 +179,10 @@ def gain_sweep(
     # BLE速率映射
     ble_rate_map = {'LE1M': 0, 'LE2M': 1, 'LES2': 2, 'LES8': 3}
     rate_num = ble_rate_map.get(ble_mode, 0)
+
+    # BLE中频偏移映射（低中频架构）
+    ble_if_offset_map = {'LE1M': 1, 'LE2M': 2, 'LES2': 1, 'LES8': 1}
+    if_offset_mhz = ble_if_offset_map.get(ble_mode, 1)
 
     # 连接信号源
     try:
@@ -198,12 +215,17 @@ def gain_sweep(
         N5182B.write(':SOURce:RADio:ARB:STATe OFF')
         N5182B.write(':OUTPut:MODulation:STATe OFF')
 
-        # 设置频率
-        freq_mhz = 2402 + chn * 2 + tone_freq
+        # 设置频率为信道实际频率（不加偏移）
+        freq_mhz = 2402 + chn * 2
         N5182B.write(f':FREQuency:FIXed {freq_mhz} MHz')
-        log(f"信号源频率: {freq_mhz} MHz", color="blue")
+        log(f"信号源频率: {freq_mhz} MHz, BLE制式: {ble_mode}, 中频: {if_offset_mhz} MHz", color="blue")
 
         for idx, (lna, tia, bbf, pga, signal_power, gain_word) in enumerate(configs):
+            # 检查停止标志
+            if stop_flag and callable(stop_flag) and stop_flag():
+                log("用户请求停止测试", color="yellow")
+                break
+
             if progress_callback:
                 progress_callback(idx + 1, total, f"测试: LNA={lna} TIA={tia} BBF={bbf} PGA={pga}")
 
@@ -256,6 +278,7 @@ def gain_sweep(
             Qdata_dec = hex2sint_list(Qdata, 12)
 
             # 分析IQ信号
+            # 目标单音频率 = 中频（1MHz或2MHz），而不是用户设置的tone_freq
             analysis = analyze_iq_signal(
                 Idata=Idata_dec,
                 Qdata=Qdata_dec,
@@ -263,7 +286,7 @@ def gain_sweep(
                 sg_pwr=signal_power,
                 dump_noise=0,  # tone模式
                 figure_off=0,
-                target_tone_freq=tone_freq * 1e6,
+                target_tone_freq=if_offset_mhz * 1e6,  # 使用中频作为目标单音频率
                 chn=chn,
                 ble_mode=ble_mode
             )
@@ -286,6 +309,13 @@ def gain_sweep(
 
             results.append((lna, tia, bbf, pga, signal_power, gain_word, measured_gain, signal_dBm, noise_dBm))
 
+            # 调用结果回调，实时更新界面表格
+            if result_callback:
+                try:
+                    result_callback(lna, tia, bbf, pga, measured_gain)
+                except Exception as e:
+                    log(f"更新结果表格失败: {e}", color="yellow")
+
             time.sleep(0.05)  # 短暂延迟
 
     finally:
@@ -297,12 +327,12 @@ def gain_sweep(
 
     # 保存结果到Excel
     if output_file:
-        save_results_to_excel(results, output_file, ble_mode, chn, tone_freq)
+        save_results_to_excel(results, output_file, ble_mode, chn, if_offset_mhz)
 
     return results
 
 
-def save_results_to_excel(results: list, output_file: str, ble_mode: str, chn: int, tone_freq: float):
+def save_results_to_excel(results: list, output_file: str, ble_mode: str, chn: int, if_offset_mhz: float):
     """保存测试结果到Excel文件"""
     try:
         wb = Workbook()
@@ -312,7 +342,7 @@ def save_results_to_excel(results: list, output_file: str, ble_mode: str, chn: i
         # 写入测试信息
         ws['A1'] = "批量增益测试结果"
         ws['A2'] = f"测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        ws['A3'] = f"BLE制式: {ble_mode}, 信道: {chn}, 单音频偏: {tone_freq} MHz"
+        ws['A3'] = f"BLE制式: {ble_mode}, 信道: {chn}, 中频: {if_offset_mhz} MHz"
 
         # 表头
         headers = ['LNA', 'TIA', 'BBF', 'PGA', '增益控制字(Hex)', '信号源功率(dBm)',

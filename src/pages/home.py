@@ -15,6 +15,8 @@ from datetime import datetime
 def home_page():
     # 创建任务状态引用
     is_running = to_ref(False)
+    # 创建停止标志
+    stop_requested = to_ref(False)
     
     with ui.column().classes('p-4 gap-4') as container:
         # 主要内容区域
@@ -55,12 +57,23 @@ def home_page():
                     # 添加任务状态指示器
                     status_label = ui.label('就绪').classes('text-lg font-medium text-green-600')
 
-                    # 开始Dump按钮
-                    ui.button(
-                        "开始Dump",
-                        on_click=lambda: start_dump(),
-                        color="blue"
-                    ).classes('mb-2')
+                    # 按钮区域
+                    with ui.row().classes('w-full gap-2'):
+                        # 开始Dump按钮
+                        start_dump_btn = ui.button(
+                            "开始Dump",
+                            on_click=lambda: start_dump(),
+                            color="blue"
+                        ).classes('flex-1')
+
+                        # 停止按钮
+                        stop_btn = ui.button(
+                            "停止",
+                            icon='stop',
+                            on_click=lambda: stop_test(),
+                            color="red"
+                        ).classes('flex-1')
+                        stop_btn.set_enabled(False)  # 初始禁用
 
                     # 分隔线
                     ui.separator().classes('my-2')
@@ -115,15 +128,43 @@ def home_page():
                     ).classes('w-full')
             
             # 右侧图表区域 - 垂直排列，占据大部分空间
-            with ui.row().classes('flex-1 gap-4'):
-                # 频域图表容器
-                with ui.column().classes('flex-2'):
-                    ui.label('频域图表').classes('text-lg font-bold mb-2')
-                    freq_chart_container = ui.plotly({}).classes('w-full').style('height: 500px; min-width: 850px')
-                # 时域图表容器
-                with ui.column().classes('flex-1'):
-                    ui.label('时域图表').classes('text-lg font-bold mb-2')
-                    time_chart_container = ui.plotly({}).classes('w-full').style('height: 500px; min-width: 650px')
+            with ui.column().classes('flex-1 gap-4'):
+                # 图表区域
+                with ui.row().classes('w-full gap-4'):
+                    # 频域图表容器
+                    with ui.column().classes('flex-2'):
+                        ui.label('频域图表').classes('text-lg font-bold mb-2')
+                        freq_chart_container = ui.plotly({}).classes('w-full').style('height: 500px; min-width: 850px')
+                    # 时域图表容器
+                    with ui.column().classes('flex-1'):
+                        ui.label('时域图表').classes('text-lg font-bold mb-2')
+                        time_chart_container = ui.plotly({}).classes('w-full').style('height: 500px; min-width: 650px')
+
+                # 增益测试结果表格区域
+                with ui.column().classes('w-full'):
+                    ui.label('增益测试结果').classes('text-lg font-bold mb-2')
+                    # 创建表格容器
+                    result_table = ui.table(
+                        columns=[
+                            {'name': 'lna', 'label': 'LNA', 'field': 'lna', 'align': 'center'},
+                            {'name': 'tia', 'label': 'TIA', 'field': 'tia', 'align': 'center'},
+                            {'name': 'bbf', 'label': 'BBF', 'field': 'bbf', 'align': 'center'},
+                            {'name': 'pga', 'label': 'PGA', 'field': 'pga', 'align': 'center'},
+                            {'name': 'gain', 'label': 'Gain (dB)', 'field': 'gain', 'align': 'center'},
+                        ],
+                        rows=[],
+                        row_key='id'
+                    ).classes('w-full').style('max-height: 300px')
+
+        # 停止测试函数
+        def stop_test():
+            """停止当前正在运行的测试"""
+            if is_running.value:
+                stop_requested.value = True
+                log("正在停止测试...", color="yellow")
+                notify("正在停止测试，请稍候...", type='warning')
+            else:
+                notify("当前没有正在运行的测试", type='info')
 
         # 浏览并选择IQ文件重新绘图
         def browse_and_redraw():
@@ -338,8 +379,17 @@ def home_page():
                 notify("请先选择增益配置文件", type='warning')
                 return
 
-            # 更新状态
+            # 清空结果表格
+            result_table.rows.clear()
+            result_table.update()
+
+            # 重置停止标志
+            stop_requested.value = False
+
+            # 更新状态和按钮
             is_running.value = True
+            stop_btn.set_enabled(True)
+            start_dump_btn.set_enabled(False)
             status_label.text = '正在执行批量增益测试...'
             status_label.classes(remove='text-green-600', add='text-blue-600')
 
@@ -349,6 +399,20 @@ def home_page():
                 freq_chart_container.figure = freq_fig
                 time_chart_container.update()
                 freq_chart_container.update()
+
+            def update_result_table(lna, tia, bbf, pga, measured_gain):
+                """在主线程中更新结果表格的回调函数"""
+                # 添加新行到表格
+                new_row = {
+                    'id': len(result_table.rows) + 1,
+                    'lna': lna,
+                    'tia': tia,
+                    'bbf': bbf,
+                    'pga': pga,
+                    'gain': f"{measured_gain:.2f}" if measured_gain is not None else "N/A"
+                }
+                result_table.rows.append(new_row)
+                result_table.update()
 
             def run_gain_sweep_task():
                 error_msg = None
@@ -378,9 +442,14 @@ def home_page():
                         chn=int(gain_test_chn.value),
                         ble_mode=ble_mode,
                         output_file=output_file,
-                        chart_update_callback=update_charts
+                        chart_update_callback=update_charts,
+                        result_callback=update_result_table,
+                        stop_flag=lambda: stop_requested.value
                     )
-                    notify(f"测试完成，结果已保存", type='positive')
+                    if stop_requested.value:
+                        notify("测试已停止", type='warning')
+                    else:
+                        notify(f"测试完成，结果已保存到: {output_file}", type='positive')
                 except GainSweepError as e:
                     error_msg = str(e)
                     log(f"增益测试错误: {error_msg}", color="red")
@@ -389,7 +458,10 @@ def home_page():
                     log(f"测试过程中发生错误: {error_msg}", color="red")
                 finally:
                     is_running.value = False
-                    status_label.text = '测试完成'
+                    stop_btn.set_enabled(False)
+                    start_dump_btn.set_enabled(True)
+                    stop_requested.value = False
+                    status_label.text = '就绪'
                     status_label.classes(remove='text-blue-600', add='text-green-600')
                     log("批量增益测试完成")
                     if error_msg:
@@ -402,31 +474,36 @@ def home_page():
             if is_running.value:
                 log("测试任务正在运行中，请等待完成后再开始新任务")
                 return
-            
+
             # 检查是否有选择信道和BLE制式
             selected_channels = channel_selector.get_selected_list()
             selected_ble_modes = ble_format_selector.get_selected_list()
-            
+
             if not selected_channels:
                 log("请至少选择一个信道")
                 return
-            
+
             if not selected_ble_modes:
                 log("请至少选择一个BLE制式")
                 return
-            
-            # 更新状态为运行中
+
+            # 重置停止标志
+            stop_requested.value = False
+
+            # 更新状态和按钮
             is_running.value = True
+            stop_btn.set_enabled(True)
+            start_dump_btn.set_enabled(False)
             status_label.text = '正在执行测试...'
             status_label.classes(remove='text-green-600', add='text-blue-600')
-            
+
             def update_charts(time_fig, freq_fig):
                 """在主线程中更新图表的回调函数"""
                 time_chart_container.figure = time_fig
                 freq_chart_container.figure = freq_fig
                 time_chart_container.update()
                 freq_chart_container.update()
-            
+
             def run_task():
                 error_msg = None
                 try:
@@ -446,8 +523,13 @@ def home_page():
                         chart_update_callback=update_charts,
                         dut_id=dut_id.value,
                         batch_id=batch_id.value,
-                        save_file_path=dump_file_path.value
+                        save_file_path=dump_file_path.value,
+                        stop_flag=lambda: stop_requested.value
                     )
+                    if stop_requested.value:
+                        notify("测试已停止", type='warning')
+                    else:
+                        notify("测试完成", type='positive')
                 except SerialPortError as e:
                     error_msg = str(e)
                     log(f"串口错误: {error_msg}", color="red")
@@ -455,9 +537,12 @@ def home_page():
                     error_msg = str(e)
                     log(f"测试过程中发生错误: {error_msg}")
                 finally:
-                    # 测试完成后更新状态
+                    # 测试完成后更新状态和按钮
                     is_running.value = False
-                    status_label.text = '测试完成'
+                    stop_btn.set_enabled(False)
+                    start_dump_btn.set_enabled(True)
+                    stop_requested.value = False
+                    status_label.text = '就绪'
                     status_label.classes(remove='text-blue-600', add='text-green-600')
                     log("任务执行完成")
                     # 如果有错误，发送通知

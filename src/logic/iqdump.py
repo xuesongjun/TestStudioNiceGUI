@@ -96,7 +96,8 @@ def iqdump(
         chart_update_callback=None,
         dut_id:str="",
         batch_id:str="",
-        save_file_path:str=""
+        save_file_path:str="",
+        stop_flag=None
 ):
     # log("log INFO .................... start",color="blue")
     log(com_num)
@@ -204,11 +205,21 @@ def iqdump(
     else:
         log("无效的 dump_type 值")
 
-    
+
     for ble_mode in ble_modes_list:
+        # 检查停止标志
+        if stop_flag and callable(stop_flag) and stop_flag():
+            log("用户请求停止测试", color="yellow")
+            break
+
         rate_num = ble_rate_map[ble_mode]
         if_offset = ble_if_offset_map[ble_mode]
         for chn in chn_list:
+            # 检查停止标志
+            if stop_flag and callable(stop_flag) and stop_flag():
+                log("用户请求停止测试", color="yellow")
+                break
+
             chn = chn + 1
             N5182B.write(f':FREQuency:FIXed {2400+chn*2+tone_freq} MHz')
             
