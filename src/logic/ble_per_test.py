@@ -214,6 +214,20 @@ def per_test(
         # 获取延迟时间
         delay_time = signal_play_time.get(ble_mode, 1.0)
 
+        # 预热测试（第一次测试结果通常不准确，丢弃）
+        log("执行预热测试...", color="blue")
+        warmup_power = start_power
+        N5182B.write(f':POWer:LEVel {warmup_power + cable_loss} dBm')
+        send_serial_command(SerialPort, f'amtBleRxStart {ble_mode} {ecw6700_channel}\r\n')
+        time.sleep(0.1)
+        N5182B.write(':OUTPut:STATe ON')
+        N5182B.write('*TRG')
+        time.sleep(delay_time + 0.2)
+        send_serial_command(SerialPort, 'amtBleRxStop\r\n')
+        N5182B.write(':OUTPut:STATe OFF')
+        time.sleep(0.1)
+        log("预热完成", color="green")
+
         # 遍历功率点进行测试
         for idx, power in enumerate(power_list):
             # 检查停止标志

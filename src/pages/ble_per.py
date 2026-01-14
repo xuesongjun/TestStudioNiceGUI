@@ -89,13 +89,13 @@ def ble_per_page():
 
                     start_power = ui.number(
                         label='起始功率 (dBm)',
-                        value=-10,
+                        value=0,
                         step=0.1
                     ).props('outlined').classes('w-full')
 
                     stop_power = ui.number(
                         label='截止功率 (dBm)',
-                        value=-96,
+                        value=-100,
                         step=0.1
                     ).props('outlined').classes('w-full')
 
@@ -115,7 +115,7 @@ def ble_per_page():
 
                     cable_loss = ui.number(
                         label='线损 (dB)',
-                        value=0,
+                        value=0.7,
                         min=0,
                         step=0.1
                     ).props('outlined').classes('w-full')
