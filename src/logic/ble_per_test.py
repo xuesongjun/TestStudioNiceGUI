@@ -414,3 +414,260 @@ def read_reg(serial_port, addr, length):
     except Exception as e:
         log(f"解析寄存器值失败: {e}", color="yellow")
         return None
+
+
+def sensitivity_scan(
+    chip_model: str,
+    com_port: str,
+    baudrate: int,
+    channels: list,
+    start_power: float,
+    stop_power: float,
+    power_step: float,
+    num_packets: int,
+    cable_loss: float,
+    per_threshold: float = 30.8,
+    ip_str: str = '169.254.252.37',
+    ble_mode: int = 0,
+    stop_flag=None,
+    progress_callback=None,
+    result_callback=None
+):
+    """
+    灵敏度扫描 - 遍历所有信道，测试每个信道的灵敏度上限
+
+    参数:
+        chip_model: 芯片型号
+        com_port: 串口号
+        baudrate: 波特率
+        channels: 信道列表 (0-39)
+        start_power: 起始功率 (dBm)
+        stop_power: 截止功率 (dBm)
+        power_step: 功率步进 (dB)
+        num_packets: 发包数
+        cable_loss: 线损 (dB)
+        per_threshold: PER 阈值 (%)，默认 30.8%
+        ip_str: N5182B IP地址
+        ble_mode: BLE模式
+        stop_flag: 停止标志
+        progress_callback: 进度回调 (current, total, channel, power, per)
+        result_callback: 结果回调 (channel, sensitivity, rssi)
+
+    返回:
+        灵敏度结果列表 [(channel, sensitivity, rssi), ...]
+    """
+    ble_mode_names = {0: '1M', 1: '2M', 2: 'LR500K', 3: 'LR125K'}
+    waveforms = {
+        0: 'WFM1:LE1M_PN9',
+        1: 'WFM1:LE2M_PN9',
+        2: 'WFM1:LES2_PN9',
+        3: 'WFM1:LES8_PN9'
+    }
+    signal_play_time = {0: 1.0, 1: 1.0, 2: 2.9, 3: 5.7}
+
+    # 生成功率列表（从高功率到低功率）
+    power_list = []
+    step = -abs(power_step)
+    current = start_power
+    while current >= stop_power:
+        power_list.append(current)
+        current += step
+
+    total_channels = len(channels)
+    total_points = total_channels * len(power_list)
+    results = []
+
+    # 连接 N5182B
+    try:
+        rm = pyvisa.ResourceManager()
+        N5182B = rm.open_resource(f'TCPIP0::{ip_str}::INSTR')
+        log(f"成功连接信号源: {ip_str}", color="green")
+    except pyvisa.VisaIOError as e:
+        raise PerTestError(f"连接信号源失败: {e}")
+
+    # 连接串口
+    SerialPort = None
+    try:
+        SerialPort = serial.Serial(
+            port=com_port,
+            baudrate=baudrate,
+            bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            timeout=2,
+            xonxoff=False,
+            rtscts=False,
+            dsrdtr=False
+        )
+        SerialPort.dtr = False
+        SerialPort.rts = False
+        log(f"串口 {com_port} 已连接", color="green")
+        time.sleep(0.2)
+        SerialPort.reset_input_buffer()
+        SerialPort.reset_output_buffer()
+        send_serial_command(SerialPort, 'echoclose 0\r\n')
+    except Exception as e:
+        N5182B.close()
+        rm.close()
+        se_str = str(e)
+        if "PermissionError" in se_str or "Access is denied" in se_str:
+            msg = f"{com_port} 被占用"
+        elif "FileNotFoundError" in se_str:
+            msg = f"未发现 {com_port}"
+        else:
+            msg = f"串口错误: {e}"
+        raise PerTestError(msg)
+
+    try:
+        # 初始化信号源
+        log("加载 BLE 波形文件...", color="blue")
+        N5182B.write('*CLS')
+        while True:
+            err = N5182B.query(':SYSTem:ERRor?')
+            if '+0' in err or 'No error' in err:
+                break
+
+        def load_waveform(N5182B, wfm_name):
+            N5182B.write('*CLS')
+            cmd = f':MEMory:COPY:NAME "NVWFM:{wfm_name}","WFM1:{wfm_name}"'
+            N5182B.write(cmd)
+            N5182B.query('*OPC?')
+            err = N5182B.query(':SYSTem:ERRor?')
+            if '+0' not in err and 'No error' not in err:
+                N5182B.write('*CLS')
+                cmd_wfm = f':MEMory:COPY:NAME "NVWFM:{wfm_name}.WFM","WFM1:{wfm_name}.WFM"'
+                N5182B.write(cmd_wfm)
+                N5182B.query('*OPC?')
+                err2 = N5182B.query(':SYSTem:ERRor?')
+                if '+0' not in err2 and 'No error' not in err2:
+                    return f'WFM1:{wfm_name}'
+                else:
+                    return f'WFM1:{wfm_name}.WFM'
+            else:
+                return f'WFM1:{wfm_name}'
+
+        waveforms[0] = load_waveform(N5182B, 'LE1M_PN9')
+        waveforms[1] = load_waveform(N5182B, 'LE2M_PN9')
+        waveforms[2] = load_waveform(N5182B, 'LES2_PN9')
+        waveforms[3] = load_waveform(N5182B, 'LES8_PN9')
+
+        N5182B.write(':RADio:ARB:TRIGger:TYPE SINGle')
+        N5182B.write(f':RADio:ARB:TRIGger:TYPE:SINGle:REPeat {num_packets}')
+        N5182B.write(':RADio:ARB:RETRigger IMM')
+        N5182B.write(':RADio:ARB:TRIGger:SOURce BUS')
+        N5182B.write(f':SOURce:RADio:ARB:WAVeform "{waveforms[ble_mode]}"')
+        N5182B.write(':SOURce:RADio:ARB:STATe ON')
+        N5182B.write(':OUTPut:MODulation:STATe ON')
+        log(f"N5182B 初始化完成，模式: {ble_mode_names[ble_mode]}", color="green")
+
+        delay_time = signal_play_time.get(ble_mode, 1.0)
+        current_point = 0
+
+        # 遍历所有信道
+        for ch_idx, channel in enumerate(channels):
+            if stop_flag and callable(stop_flag) and stop_flag():
+                log("用户请求停止测试", color="yellow")
+                break
+
+            ecw6700_channel = channel + 1
+            freq_mhz = 2400 + ecw6700_channel * 2
+            N5182B.write(f':FREQuency:FIXed {freq_mhz} MHz')
+            log(f"[信道 {channel}] 频率: {freq_mhz} MHz", color="blue")
+
+            # 预热
+            warmup_power = start_power
+            N5182B.write(f':POWer:LEVel {warmup_power + cable_loss} dBm')
+            send_serial_command(SerialPort, f'amtBleRxStart {ble_mode} {ecw6700_channel}\r\n')
+            time.sleep(0.1)
+            N5182B.write(':OUTPut:STATe ON')
+            N5182B.write('*TRG')
+            time.sleep(delay_time + 0.2)
+            send_serial_command(SerialPort, 'amtBleRxStop\r\n')
+            N5182B.write(':OUTPut:STATe OFF')
+            time.sleep(0.1)
+
+            sensitivity = None
+            sensitivity_rssi = None
+
+            # 从高功率到低功率扫描，找到PER刚超过阈值的点
+            for power in power_list:
+                if stop_flag and callable(stop_flag) and stop_flag():
+                    break
+
+                current_point += 1
+                N5182B.write(f':POWer:LEVel {power + cable_loss} dBm')
+                send_serial_command(SerialPort, f'amtBleRxStart {ble_mode} {ecw6700_channel}\r\n')
+                time.sleep(0.1)
+                N5182B.write(':OUTPut:STATe ON')
+                N5182B.write('*TRG')
+                time.sleep(0.2)
+
+                # 读取 RSSI
+                rssi = None
+                try:
+                    rssi_reg_value = read_reg(SerialPort, 0x20470c40, 4)
+                    if rssi_reg_value is not None:
+                        rssi_value_sync_ok = rssi_reg_value >> 16
+                        rssi = u2s_fixed(rssi_value_sync_ok, 12, 2)
+                except:
+                    pass
+
+                time.sleep(delay_time)
+                send_serial_command(SerialPort, 'amtBleRxStop\r\n')
+                N5182B.write(':OUTPut:STATe OFF')
+
+                # 读取收包数
+                rx_count = -1
+                try:
+                    rx_count = read_reg(SerialPort, 0x204600d8, 4)
+                    if rx_count is None:
+                        rx_count = -1
+                except:
+                    pass
+
+                if rx_count < 0:
+                    per = 100.0
+                else:
+                    per = (num_packets - rx_count) / num_packets * 100
+
+                log(f"  功率: {power:.1f} dBm, PER: {per:.2f}%", color="green" if per <= per_threshold else "yellow")
+
+                # 更新进度
+                if progress_callback:
+                    try:
+                        progress_callback(current_point, total_points, channel, power, per)
+                    except:
+                        pass
+
+                # 检查是否找到灵敏度点
+                if per > per_threshold:
+                    # 上一个功率点是灵敏度上限
+                    sensitivity = power + abs(power_step)
+                    sensitivity_rssi = rssi
+                    log(f"  信道 {channel} 灵敏度: {sensitivity:.1f} dBm (PER @ {power:.1f}dBm = {per:.2f}%)", color="green")
+                    break
+
+            # 如果扫描完所有功率点都没有超过阈值，则灵敏度为最低功率
+            if sensitivity is None:
+                sensitivity = stop_power
+                sensitivity_rssi = rssi
+                log(f"  信道 {channel} 灵敏度 < {stop_power:.1f} dBm", color="green")
+
+            results.append((channel, sensitivity, sensitivity_rssi))
+
+            # 结果回调
+            if result_callback:
+                try:
+                    result_callback(channel, sensitivity, sensitivity_rssi)
+                except:
+                    pass
+
+    finally:
+        if SerialPort and SerialPort.is_open:
+            SerialPort.close()
+            log("串口已关闭", color="green")
+        N5182B.close()
+        rm.close()
+        log("灵敏度扫描完成，资源已释放", color="green")
+
+    return results
