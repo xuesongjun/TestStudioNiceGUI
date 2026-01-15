@@ -594,6 +594,13 @@ def ble_per_page():
                 channels = [r['channel'] for r in sensitivity_results]
                 sensitivities = [float(r['sensitivity']) for r in sensitivity_results]
 
+                # 计算Y轴范围，放大差异显示
+                min_sens = min(sensitivities)
+                max_sens = max(sensitivities)
+                # Y轴范围：最小值-2 到 最大值+2，确保有足够空间显示标签
+                y_min = min_sens - 2
+                y_max = max_sens + 2
+
                 sens_fig = go.Figure()
                 sens_fig.add_trace(
                     go.Bar(
@@ -609,6 +616,10 @@ def ble_per_page():
                     height=500,
                     xaxis_title='信道',
                     yaxis_title='灵敏度 (dBm)',
+                    yaxis=dict(
+                        range=[y_max, y_min],  # 反转Y轴：大值在下，小值在上
+                        autorange=False
+                    ),
                     margin=dict(l=60, r=20, t=50, b=50),
                     autosize=True
                 )
