@@ -178,10 +178,47 @@ def per_test(
     try:
         # 初始化 N5182B - 加载 BLE 波形
         log("加载 BLE 波形文件...", color="blue")
-        N5182B.write(':MEMory:COPY:NAME "NVWFM:LE1M_PN9","WFM1:LE1M_PN9"')
-        N5182B.write(':MEMory:COPY:NAME "NVWFM:LE2M_PN9","WFM1:LE2M_PN9"')
-        N5182B.write(':MEMory:COPY:NAME "NVWFM:LES2_PN9","WFM1:LES2_PN9"')
-        N5182B.write(':MEMory:COPY:NAME "NVWFM:LES8_PN9","WFM1:LES8_PN9"')
+
+        # 清空错误队列
+        N5182B.write('*CLS')
+        while True:
+            err = N5182B.query(':SYSTem:ERRor?')
+            if '+0' in err or 'No error' in err:
+                break
+
+        def load_waveform(N5182B, wfm_name):
+            """加载波形文件，如果失败则尝试带.WFM后缀，返回实际成功的波形名称"""
+            # 清空错误队列
+            N5182B.write('*CLS')
+            # 先尝试不带后缀
+            cmd = f':MEMory:COPY:NAME "NVWFM:{wfm_name}","WFM1:{wfm_name}"'
+            N5182B.write(cmd)
+            N5182B.query('*OPC?')  # 等待操作完成
+            # 查询错误状态
+            err = N5182B.query(':SYSTem:ERRor?')
+            if '+0' not in err and 'No error' not in err:
+                # 有错误，清空队列后尝试带.WFM后缀
+                N5182B.write('*CLS')
+                log(f"波形 {wfm_name} 加载失败，尝试带.WFM后缀...", color="yellow")
+                cmd_wfm = f':MEMory:COPY:NAME "NVWFM:{wfm_name}.WFM","WFM1:{wfm_name}.WFM"'
+                N5182B.write(cmd_wfm)
+                N5182B.query('*OPC?')  # 等待操作完成
+                err2 = N5182B.query(':SYSTem:ERRor?')
+                if '+0' not in err2 and 'No error' not in err2:
+                    log(f"波形 {wfm_name} 加载失败: {err2}", color="red")
+                    return f'WFM1:{wfm_name}'  # 返回原始名称（虽然失败）
+                else:
+                    log(f"波形 {wfm_name}.WFM 加载成功", color="green")
+                    return f'WFM1:{wfm_name}.WFM'  # 返回带后缀的名称
+            else:
+                log(f"波形 {wfm_name} 加载成功", color="green")
+                return f'WFM1:{wfm_name}'  # 返回不带后缀的名称
+
+        # 加载波形并更新waveforms字典中的实际名称
+        waveforms[0] = load_waveform(N5182B, 'LE1M_PN9')
+        waveforms[1] = load_waveform(N5182B, 'LE2M_PN9')
+        waveforms[2] = load_waveform(N5182B, 'LES2_PN9')
+        waveforms[3] = load_waveform(N5182B, 'LES8_PN9')
 
         # 设置触发方式为单次触发且重复发送指定次数
         N5182B.write(':RADio:ARB:TRIGger:TYPE SINGle')
