@@ -91,6 +91,9 @@ def iqdump(
         vpp:float=1.1,
         nbit:int=12,
         dump_type:int=0,
+        iqdump_mode:int=0,  # 0: rxdump, 1: phydump
+        iqdump_trigger:int=0,  # 0: free run, 1: trigger
+        iq_swap:bool=True,  # True: 交换IQ, False: 不交换
         chn_list:list[int]=list(range(40)),
         ble_modes_list:list[str]=list(["LE1M","LE2M","LES2","LES8"]),
         chart_update_callback=None,
@@ -234,7 +237,7 @@ def iqdump(
                 #log(f'amtBleRxStartInf {rate_num} {chn}')
                 SerialPort.write_cmd(f'amtBleRxStartInf {rate_num} {chn}')
                 N5182B.write('*TRG')
-                SerialPort.write_cmd(f'amtbleiqdump 0 0 0x7fff 0x3a98')
+                SerialPort.write_cmd(f'amtbleiqdump {iqdump_mode} {iqdump_trigger} 0x7fff 0x3a98')
                 time.sleep(0.1)
                 SerialPort.write_reg(0x2020e000,0x0)
                 N5182B.write(':OUTPut:STATe OFF')
@@ -250,16 +253,23 @@ def iqdump(
                 Idata_dec_noise = hex2sint_list(Idata_noise, 12)
                 Qdata_dec_noise = hex2sint_list(Qdata_noise, 12)
                 # 保存Noise数据到文件
-                IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_noise, Qdata_noise, Idata_noise)]
+                if iq_swap:
+                    IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_noise, Qdata_noise, Idata_noise)]
+                else:
+                    IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_noise, Idata_noise, Qdata_noise)]
                 file_path = os.path.join(save_file_path, f'iqdata_{ble_mode}_{2400+chn*2-if_offset}_Noise.txt')
                 with open(file_path, 'w') as file:
                     for item in IQSWAP_HEX:
                         file.write(item + '\n')
                 log("数据已成功写入 iqdata_%s_%d_%s.txt 文件。"%(ble_mode,2400+chn*2-if_offset,"Noise"),color="red")
-                # 分析noise数据
+                # 分析noise数据（根据iq_swap交换IQ）
+                if iq_swap:
+                    analysis_I, analysis_Q = Qdata_dec_noise, Idata_dec_noise
+                else:
+                    analysis_I, analysis_Q = Idata_dec_noise, Qdata_dec_noise
                 noise_analysis = analyze_iq_signal(
-                    Idata=Idata_dec_noise,
-                    Qdata=Qdata_dec_noise,
+                    Idata=analysis_I,
+                    Qdata=analysis_Q,
                     fs=fs, vpp=vpp, nbit=nbit, sg_pwr=AMPTD,
                     dump_noise=1,  # noise模式
                     figure_off=0,  # 不显示图表,只获取数据
@@ -281,7 +291,7 @@ def iqdump(
                 log("第二步：进行Tone测试")
                 N5182B.write(':OUTPut:STATe ON')  # 打开输出进行tone测试
                 SerialPort.write_cmd(f'amtBleRxStartInf {rate_num} {chn}')
-                SerialPort.write_cmd(f'amtbleiqdump 0 0 0x7fff 0x3a98')
+                SerialPort.write_cmd(f'amtbleiqdump {iqdump_mode} {iqdump_trigger} 0x7fff 0x3a98')
                 time.sleep(0.1)
                 SerialPort.write_reg(0x2020e000,0x0)
                 N5182B.write(':OUTPut:STATe OFF')
@@ -297,17 +307,24 @@ def iqdump(
                 Idata_dec_tone = hex2sint_list(Idata_tone, 12)
                 Qdata_dec_tone = hex2sint_list(Qdata_tone, 12)
                 # 保存Tone数据到文件
-                IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_tone, Qdata_tone, Idata_tone)]
+                if iq_swap:
+                    IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_tone, Qdata_tone, Idata_tone)]
+                else:
+                    IQSWAP_HEX = [g + i + q for g, i, q in zip(gain_tone, Idata_tone, Qdata_tone)]
                 file_path = os.path.join(save_file_path, f'iqdata_{ble_mode}_{2400+chn*2-if_offset}_Tone.txt')
                 with open(file_path, 'w') as file:
                     for item in IQSWAP_HEX:
                         file.write(item + '\n')
                 log("数据已成功写入 iqdata_%s_%d_%s.txt 文件。"%(ble_mode,2400+chn*2-if_offset,"Tone"),color="red")
-                
-                # 分析tone数据
+
+                # 分析tone数据（根据iq_swap交换IQ）
+                if iq_swap:
+                    analysis_I, analysis_Q = Qdata_dec_tone, Idata_dec_tone
+                else:
+                    analysis_I, analysis_Q = Idata_dec_tone, Qdata_dec_tone
                 tone_analysis = analyze_iq_signal(
-                    Idata=Idata_dec_tone,
-                    Qdata=Qdata_dec_tone,
+                    Idata=analysis_I,
+                    Qdata=analysis_Q,
                     fs=fs, vpp=vpp, nbit=nbit, sg_pwr=AMPTD,
                     dump_noise=0,  # tone模式
                     figure_off=0,  # 显示图表
@@ -380,7 +397,7 @@ def iqdump(
                 log(f'amtBleRxStartInf {rate_num} {chn}')
                 SerialPort.write_cmd(f'amtBleRxStartInf {rate_num} {chn}')
                 N5182B.write('*TRG')
-                SerialPort.write_cmd(f'amtbleiqdump 0 0 0x7fff 0x3a98')
+                SerialPort.write_cmd(f'amtbleiqdump {iqdump_mode} {iqdump_trigger} 0x7fff 0x3a98')
                 time.sleep(0.1)
                 SerialPort.write_reg(0x2020e000,0x0)
                 N5182B.write(':OUTPut:STATe OFF')
@@ -395,11 +412,15 @@ def iqdump(
                 Qdata = [hex_value[5:8] for hex_value in hex_list]
                 Idata_dec_tmp = hex2sint_list(Idata,12)
                 Qdata_dec_tmp = hex2sint_list(Qdata,12)
-                
-                # ========== 调用IQ数据分析 ==========
+
+                # ========== 调用IQ数据分析（根据iq_swap交换IQ） ==========
+                if iq_swap:
+                    analysis_I, analysis_Q = Qdata_dec_tmp, Idata_dec_tmp
+                else:
+                    analysis_I, analysis_Q = Idata_dec_tmp, Qdata_dec_tmp
                 analysis_result = analyze_iq_signal(
-                    Idata=Idata_dec_tmp,
-                    Qdata=Qdata_dec_tmp,
+                    Idata=analysis_I,
+                    Qdata=analysis_Q,
                     fs=fs,
                     vpp=vpp,
                     nbit=nbit,
@@ -446,7 +467,10 @@ def iqdump(
                 )
                 
                 #交换IQ，并拼接成新的list
-                IQSWAP_HEX = [g + i + q for g, i, q in zip(gain, Qdata, Idata)]
+                if iq_swap:
+                    IQSWAP_HEX = [g + i + q for g, i, q in zip(gain, Qdata, Idata)]
+                else:
+                    IQSWAP_HEX = [g + i + q for g, i, q in zip(gain, Idata, Qdata)]
                 # 指定文件路径
                 file_path = os.path.join(save_file_path, f'iqdata_{ble_mode}_{2400+chn*2-if_offset}_{dump_type_str}.txt')
 

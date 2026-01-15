@@ -28,6 +28,13 @@ def analyze_iq_signal(
     chn=None, ble_mode=None
 ):
 
+    # 根据 BLE 模式自动调整噪声积分带宽
+    # LE2M: 中频2MHz，积分带宽 1M~3M
+    # 其他模式: 中频1MHz，积分带宽 0.5M~1.5M
+    if ble_mode == 'LE2M':
+        noise_integ_start_freq = 1e6
+        noise_integ_stop_freq = 3e6
+
     # ========== IQ 数据输入 ==========
     Idata_dec = np.array(Idata)
     Qdata_dec = np.array(Qdata)

@@ -288,7 +288,7 @@ def ble_per_page():
                 secondary_y=True
             )
             fig.add_hline(y=30.8, line_dash="dash", line_color="red",
-                         annotation_text="PER=30.8%", annotation_position="right",
+                         annotation_text="PER=30.8%", annotation_position="bottom left",
                          secondary_y=False)
             fig.update_xaxes(title_text="功率 (dBm)")
             fig.update_yaxes(title_text="PER (%)", range=[0, 110], secondary_y=False)

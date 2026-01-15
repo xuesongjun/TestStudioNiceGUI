@@ -51,8 +51,25 @@ def home_page():
                     rxui.input("批次编号", value=batch_id, placeholder="自动生成或手动输入").props('outlined clearable')
 
                     dump_type = ui.select(options = {0:'noise',1:'tone',2:'wave',3:'NF'}, value=0,label="Dump类型").props('outlined clearable').style('min-width: 170px')
+
+                    # IQ Dump 模式选择
+                    with ui.row().classes('w-full gap-2'):
+                        iqdump_mode = ui.select(
+                            options={0: 'rxdump', 1: 'phydump'},
+                            value=0,
+                            label="IQ模式"
+                        ).props('outlined dense').classes('flex-1')
+
+                        iqdump_trigger = ui.select(
+                            options={0: 'free run', 1: 'trigger'},
+                            value=0,
+                            label="触发模式"
+                        ).props('outlined dense').classes('flex-1')
+
+                        iq_swap = ui.checkbox('IQ Swap', value=True).classes('self-center')
+
                     signal_amptd = ui.number(label='信号功率', value=-80,step=0.1, placeholder='输入信号功率(dBm)').props('outlined clearable debounce="500"')
-                    cable_loss = ui.number(label='线损', value=0.65,step=0.01,placeholder='输入线损(dB)').props('outlined clearable debounce="500"')
+                    cable_loss = ui.number(label='线损', value=0.7,step=0.01,placeholder='输入线损(dB)').props('outlined clearable debounce="500"')
 
                     # 添加任务状态指示器
                     status_label = ui.label('就绪').classes('text-lg font-medium text-green-600')
@@ -516,6 +533,9 @@ def home_page():
                         ip_str=ip_addr.value,
                         com_num=int(com_num.value[3:]),
                         dump_type=dump_type.value,
+                        iqdump_mode=iqdump_mode.value,
+                        iqdump_trigger=iqdump_trigger.value,
+                        iq_swap=iq_swap.value,
                         AMPTD=signal_amptd.value,
                         cable_loss=cable_loss.value,
                         chn_list=selected_channels,
