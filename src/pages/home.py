@@ -571,8 +571,4 @@ def home_page():
             # 启动新线程执行任务
             threading.Thread(target=run_task, daemon=True).start()
 
-        # 统一日志区
-        from pages.layout import log_area
-        log_area  # 直接挂在页面下方
-
     return container
