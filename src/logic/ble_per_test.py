@@ -434,15 +434,17 @@ def sensitivity_scan(
     result_callback=None
 ):
     """
-    灵敏度扫描 - 遍历所有信道，测试每个信道的灵敏度上限
+    灵敏度扫描 - 遍历所有信道，测试每个信道的灵敏度
+
+    从低功率开始逐步增加功率，一旦PER满足门限要求（<= per_threshold）就停止
 
     参数:
         chip_model: 芯片型号
         com_port: 串口号
         baudrate: 波特率
         channels: 信道列表 (0-39)
-        start_power: 起始功率 (dBm)
-        stop_power: 截止功率 (dBm)
+        start_power: 起始功率 (dBm)，较小的功率值
+        stop_power: 截止功率 (dBm)，较大的功率值
         power_step: 功率步进 (dB)
         num_packets: 发包数
         cable_loss: 线损 (dB)
@@ -465,11 +467,11 @@ def sensitivity_scan(
     }
     signal_play_time = {0: 1.0, 1: 1.0, 2: 2.9, 3: 5.7}
 
-    # 生成功率列表（从高功率到低功率）
+    # 生成功率列表（从低功率到高功率）
     power_list = []
-    step = -abs(power_step)
+    step = abs(power_step)
     current = start_power
-    while current >= stop_power:
+    while current <= stop_power:
         power_list.append(current)
         current += step
 
@@ -574,8 +576,8 @@ def sensitivity_scan(
             N5182B.write(f':FREQuency:FIXed {freq_mhz} MHz')
             log(f"[信道 {channel}] 频率: {freq_mhz} MHz", color="blue")
 
-            # 预热
-            warmup_power = start_power
+            # 预热（使用较高功率确保能收到信号）
+            warmup_power = stop_power
             N5182B.write(f':POWer:LEVel {warmup_power + cable_loss} dBm')
             send_serial_command(SerialPort, f'amtBleRxStart {ble_mode} {ecw6700_channel}\r\n')
             time.sleep(0.1)
@@ -589,7 +591,7 @@ def sensitivity_scan(
             sensitivity = None
             sensitivity_rssi = None
 
-            # 从高功率到低功率扫描，找到PER刚超过阈值的点
+            # 从低功率到高功率扫描，找到PER首次满足门限的点
             for power in power_list:
                 if stop_flag and callable(stop_flag) and stop_flag():
                     break
@@ -639,19 +641,18 @@ def sensitivity_scan(
                     except:
                         pass
 
-                # 检查是否找到灵敏度点
-                if per > per_threshold:
-                    # 上一个功率点是灵敏度上限
-                    sensitivity = power + abs(power_step)
+                # 检查是否找到灵敏度点：PER满足门限要求
+                if per <= per_threshold:
+                    sensitivity = power
                     sensitivity_rssi = rssi
-                    log(f"  信道 {channel} 灵敏度: {sensitivity:.1f} dBm (PER @ {power:.1f}dBm = {per:.2f}%)", color="green")
+                    log(f"  信道 {channel} 灵敏度: {sensitivity:.1f} dBm (PER = {per:.2f}%)", color="green")
                     break
 
-            # 如果扫描完所有功率点都没有超过阈值，则灵敏度为最低功率
+            # 如果扫描完所有功率点都没有满足门限，则灵敏度为最高功率（未找到）
             if sensitivity is None:
                 sensitivity = stop_power
                 sensitivity_rssi = rssi
-                log(f"  信道 {channel} 灵敏度 < {stop_power:.1f} dBm", color="green")
+                log(f"  信道 {channel} 灵敏度 > {stop_power:.1f} dBm (未找到)", color="yellow")
 
             results.append((channel, sensitivity, sensitivity_rssi))
 

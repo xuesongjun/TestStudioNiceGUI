@@ -132,13 +132,13 @@ def ble_per_page():
 
                     start_power = ui.number(
                         label='起始功率 (dBm)',
-                        value=-70,
+                        value=-100,
                         step=0.1
                     ).props('outlined').classes('w-full')
 
                     stop_power = ui.number(
                         label='截止功率 (dBm)',
-                        value=-100,
+                        value=-70,
                         step=0.1
                     ).props('outlined').classes('w-full')
 

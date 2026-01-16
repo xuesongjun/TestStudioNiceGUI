@@ -28,7 +28,7 @@ if errorlevel 1 (
 
 echo [信息] 正在启动应用...
 echo.
-python src/main.py
+python -u src/main.py
 
 REM 如果程序异常退出，显示错误信息
 if errorlevel 1 (

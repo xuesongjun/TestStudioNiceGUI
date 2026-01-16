@@ -1,3 +1,10 @@
+import sys
+import os
+
+# 禁用stdout缓冲，确保日志实时输出
+sys.stdout.reconfigure(line_buffering=True)
+os.environ['PYTHONUNBUFFERED'] = '1'
+
 from nicegui import ui
 from pages.home import home_page
 from pages.settings import settings_page
@@ -54,7 +61,7 @@ with ui.header().classes('bg-blue-600 text-white'):
     with ui.row().classes('w-full items-center justify-between p-2'):
         ui.label('Test Studio').classes('text-xl font-bold')
         with ui.row().classes('gap-4'):
-            ui.button('首页', on_click=show_home).props('icon=home flat')
+            ui.button('IQ Dump', on_click=show_home).props('icon=home flat')
             ui.button('BLE PER', on_click=show_ble_per).props('icon=signal_cellular_alt flat')
             ui.button('数据查看', on_click=show_data_view).props('icon=table_chart flat')
             ui.button('设置', on_click=show_settings).props('icon=settings flat')
