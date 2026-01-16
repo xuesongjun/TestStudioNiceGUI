@@ -6,7 +6,17 @@
       "Bash(grep:*)",
       "Bash(source venv/Scripts/activate)",
       "Bash(pip install:*)",
-      "Bash(source ../venv/Scripts/activate)"
+      "Bash(source ../venv/Scripts/activate)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(tasklist /FI \"PID eq 24692\" /FO LIST)",
+      "Bash(tasklist:*)",
+      "Bash(powershell -Command \"Get-Process -Id 24692,13032 | Select-Object Id,ProcessName,Path\")",
+      "Bash(powershell -Command:*)",
+      "Bash(taskkill //F //PID 24692)",
+      "Bash(git -C \"c:/workspace/test_studio\" diff)",
+      "Bash(git -C \"c:/workspace/test_studio\" checkout -- src/main.py src/pages/layout.py)",
+      "Bash(taskkill //F //PID 13032)"
     ]
   }
 }

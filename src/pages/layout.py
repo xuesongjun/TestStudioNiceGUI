@@ -48,12 +48,18 @@ def _is_element_active(element) -> bool:
     return True
 
 
-def create_log_area():
-    """为当前客户端创建（或替换）日志区域"""
+def create_log_area(height: str = None):
+    """为当前客户端创建（或替换）日志区域
+
+    Args:
+        height: 自定义高度，如 '100%' 或 '400px'，默认使用 h-48
+    """
     global log_area, scroll_container
 
-    # 每次新页面请求都重新创建，避免跨客户端复用导致“客户端已删除”错误
-    with ui.scroll_area().classes('w-full h-48 border border-gray-300 rounded bg-white') as scroll:
+    # 每次新页面请求都重新创建，避免跨客户端复用导致"客户端已删除"错误
+    height_class = '' if height else 'h-48'
+    height_style = f'height: {height};' if height else ''
+    with ui.scroll_area().classes(f'w-full {height_class} border border-gray-300 rounded bg-white').style(height_style) as scroll:
         scroll_container = scroll
         log_area = ui.html(sanitize=False).classes('font-mono text-sm p-2').style('padding-bottom: 20px;')
 
@@ -67,6 +73,37 @@ def create_log_area():
         current_client.on_delete(_clear_on_delete)
 
     return log_area
+
+
+def clear_log():
+    """清空日志内容"""
+    global log_area
+    if log_area is None:
+        return
+    try:
+        log_area.content = ""
+        log_area.update()
+    except Exception as e:
+        print(f"Clear log failed: {e}", flush=True)
+
+
+def refresh_log_display():
+    """刷新日志显示（切换到日志页面时调用）"""
+    global log_area, scroll_container
+    if log_area is None:
+        return
+    try:
+        # 强制触发更新：先保存内容，清空，再恢复
+        content = log_area.content or ""
+        log_area.content = ""
+        log_area.update()
+        log_area.content = content
+        log_area.update()
+        if scroll_container is not None:
+            scroll_container.scroll_to(percent=1.0)
+    except Exception as e:
+        print(f"Refresh log display failed: {e}", flush=True)
+
 
 def log(*args, sep=' ', end='\n', file=None, flush=True, with_timestamp=None, color=None):
     """
@@ -117,9 +154,10 @@ def _process_log_queue():
     """处理日志队列中的消息"""
     global log_area
 
-    if not _is_element_active(log_area):
+    if log_area is None:
         return
 
+    # 即使元素可能不活跃，也尝试更新（避免丢失日志）
     updated = False
     while not _log_queue.empty():
         try:
@@ -139,10 +177,11 @@ def _process_log_queue():
     if updated:
         try:
             log_area.update()
-            if _is_element_active(scroll_container):
+            if scroll_container is not None:
                 scroll_container.scroll_to(percent=1.0)
         except Exception as e:
-            print(f"Scroll/update log area failed: {e}", flush=True)
+            # 静默处理更新失败（页面隐藏时可能失败）
+            pass
 
 
 def _process_notify_queue():

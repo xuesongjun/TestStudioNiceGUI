@@ -220,3 +220,4 @@ data/*.sqlite3
 !requirements.txt
 !README.txt
 !LICENSE.txt
+.claude/settings.local.json
