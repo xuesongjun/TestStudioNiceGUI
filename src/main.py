@@ -105,4 +105,4 @@ if __name__ in {'__main__', '__mp_main__'}:
     init_db(table_name="ble_test_results")  # 启动时自动创建表和数据库
 
     # 启动应用
-    ui.run(title='Test Studio', port=8081, reload=False)
+    ui.run(title='Test Studio', port=8081, reload=True)

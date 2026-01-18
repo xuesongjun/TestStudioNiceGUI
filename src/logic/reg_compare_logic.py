@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Callable, Tuple, Any
 from pathlib import Path
-from pages.layout import log
 
 
 class RegCompareError(Exception):
@@ -133,7 +132,6 @@ class DeviceReader:
         # 关闭回显，避免时间戳等信息干扰解析
         self.serial.reset_input_buffer()
         self.serial.write(b"echoclose 0\r\n")
-        log("关闭回显")
         time.sleep(0.05)
         self.serial.reset_input_buffer()  # 清除响应
 

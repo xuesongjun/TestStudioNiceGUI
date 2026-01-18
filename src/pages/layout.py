@@ -93,12 +93,9 @@ def refresh_log_display():
     if log_area is None:
         return
     try:
-        # 强制触发更新：先保存内容，清空，再恢复
+        # 使用 set_content 方法强制更新
         content = log_area.content or ""
-        log_area.content = ""
-        log_area.update()
-        log_area.content = content
-        log_area.update()
+        log_area.set_content(content)
         if scroll_container is not None:
             scroll_container.scroll_to(percent=1.0)
     except Exception as e:
@@ -157,8 +154,8 @@ def _process_log_queue():
     if log_area is None:
         return
 
-    # 即使元素可能不活跃，也尝试更新（避免丢失日志）
-    updated = False
+    # 收集所有待处理的日志消息
+    messages = []
     while not _log_queue.empty():
         try:
             item = _log_queue.get_nowait()
@@ -167,16 +164,16 @@ def _process_log_queue():
                 f'<div style="color: {color_value}; margin: 0; padding: 0; line-height: 1.2;">'
                 f'{item["message"]}</div>'
             )
-
-            current_content = log_area.content if hasattr(log_area, 'content') and log_area.content else ""
-            log_area.content = current_content + html_message
-            updated = True
+            messages.append(html_message)
         except Exception as e:
             print(f"Process log failed: {e}", flush=True)
 
-    if updated:
+    if messages:
         try:
-            log_area.update()
+            current_content = log_area.content or ""
+            new_content = current_content + ''.join(messages)
+            # 使用 set_content 确保更新被推送到前端
+            log_area.set_content(new_content)
             if scroll_container is not None:
                 scroll_container.scroll_to(percent=1.0)
         except Exception as e:

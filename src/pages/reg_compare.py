@@ -224,7 +224,6 @@ def reg_compare_page():
                     initial_columns = [
                         {'name': 'group', 'label': '分组', 'field': 'group', 'align': 'left', 'sortable': True},
                         {'name': 'address', 'label': '地址', 'field': 'address', 'align': 'center', 'sortable': True},
-                        {'name': 'name', 'label': '名称', 'field': 'name', 'align': 'left'},
                         {'name': 'device_0', 'label': '设备1', 'field': 'device_0', 'align': 'center'},
                         {'name': 'device_1', 'label': '设备2', 'field': 'device_1', 'align': 'center'},
                     ]
@@ -264,7 +263,6 @@ def reg_compare_page():
             columns = [
                 {'name': 'group', 'label': '分组', 'field': 'group', 'align': 'left', 'sortable': True},
                 {'name': 'address', 'label': '地址', 'field': 'address', 'align': 'center', 'sortable': True},
-                {'name': 'name', 'label': '名称', 'field': 'name', 'align': 'left'},
             ]
             for i in range(device_count.value):
                 columns.append({
@@ -350,7 +348,6 @@ def reg_compare_page():
                             'id': len(compare_results) + 1,
                             'group': result.group,
                             'address': f'0x{result.address:08X}',
-                            'name': result.name,
                         }
 
                         # 添加各设备的值
