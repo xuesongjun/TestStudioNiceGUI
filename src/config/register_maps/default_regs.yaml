@@ -14,6 +14,8 @@ register_groups:
       start: 0x00
       end: 0x30
       step: 4
+    # 排除的寄存器偏移地址（校准寄存器）
+    exclude_offsets: []
 
   - name: PLL_DIG_CNTL
     description: "PLL数字控制寄存器"
@@ -22,6 +24,7 @@ register_groups:
       start: 0x400
       end: 0x4bc
       step: 4
+    exclude_offsets: []
 
   - name: AGC
     description: "自动增益控制寄存器"
@@ -30,6 +33,7 @@ register_groups:
       start: 0x00
       end: 0xd8
       step: 4
+    exclude_offsets: []
 
   - name: DC_COMP
     description: "直流补偿寄存器"
@@ -38,7 +42,12 @@ register_groups:
       start: 0x00
       end: 0x84
       step: 4
-
+    # 示例：排除偏移 0x00, 0x04, 0x08 的校准寄存器
+    exclude_offsets: [0x00, 0x04, 0x08,0x0C,0x10,0x14,0x18,0x1C
+                     ,0x20,0x24,0x28,0x2C,0x30,0x34,0x38,0x3C
+                     ,0x40,0x44,0x48,0x4C,0x50,0x54,0x58,0x5C
+                     ,0x60,0x64,0x68,0x6C,0x70,0x74,0x78,0x7C
+                     ,0x80,0x84]
   - name: TX_ABB
     description: "发射模拟基带寄存器"
     base_address: 0x20203a00
@@ -46,6 +55,7 @@ register_groups:
       start: 0x00
       end: 0x48
       step: 4
+    exclude_offsets: []
 
   - name: RX_ADC
     description: "ADC寄存器"
@@ -54,6 +64,7 @@ register_groups:
       start: 0x00
       end: 0x20
       step: 4
+    exclude_offsets: []
 
   - name: RX_BBF_PGA
     description: "BBF_PGA寄存器"
@@ -62,6 +73,7 @@ register_groups:
       start: 0x00
       end: 0x34
       step: 4
+    exclude_offsets: []
 
 # 读取配置
 read_settings:

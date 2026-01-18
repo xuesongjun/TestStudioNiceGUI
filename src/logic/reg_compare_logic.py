@@ -65,13 +65,18 @@ def load_register_config(yaml_path: str) -> Tuple[str, List[RegisterInfo]]:
     for group in config.get('register_groups', []):
         group_name = group['name']
         base_addr = group['base_address']
+        # 获取排除的偏移地址列表
+        exclude_offsets = set(group.get('exclude_offsets', []))
 
         # 方式1: 显式定义的寄存器列表
         if 'registers' in group:
             for reg in group['registers']:
+                offset = reg['offset']
+                if offset in exclude_offsets:
+                    continue  # 跳过排除的寄存器
                 registers.append(RegisterInfo(
-                    address=base_addr + reg['offset'],
-                    name=reg.get('name', f"REG_0x{base_addr + reg['offset']:08X}"),
+                    address=base_addr + offset,
+                    name=reg.get('name', f"REG_0x{base_addr + offset:08X}"),
                     size=reg.get('size', 4),
                     group=group_name,
                     description=reg.get('description', '')
@@ -81,6 +86,8 @@ def load_register_config(yaml_path: str) -> Tuple[str, List[RegisterInfo]]:
         if 'range' in group:
             r = group['range']
             for offset in range(r['start'], r['end'] + 1, r.get('step', 4)):
+                if offset in exclude_offsets:
+                    continue  # 跳过排除的寄存器
                 addr = base_addr + offset
                 registers.append(RegisterInfo(
                     address=addr,
@@ -99,13 +106,20 @@ def get_register_groups(yaml_path: str) -> List[Dict[str, Any]]:
 
     groups = []
     for group in config.get('register_groups', []):
-        # 计算寄存器数量
+        # 获取排除的偏移地址列表
+        exclude_offsets = set(group.get('exclude_offsets', []))
+
+        # 计算寄存器数量（排除后的）
         count = 0
         if 'registers' in group:
-            count = len(group['registers'])
+            for reg in group['registers']:
+                if reg['offset'] not in exclude_offsets:
+                    count += 1
         if 'range' in group:
             r = group['range']
-            count = (r['end'] - r['start']) // r.get('step', 4) + 1
+            for offset in range(r['start'], r['end'] + 1, r.get('step', 4)):
+                if offset not in exclude_offsets:
+                    count += 1
 
         groups.append({
             'name': group['name'],
