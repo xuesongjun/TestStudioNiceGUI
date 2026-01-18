@@ -1,0 +1,70 @@
+# ECW6700 寄存器配置文件
+# 用于寄存器对比功能
+
+chip_model: ECW6700
+description: "ECW6700 寄存器配置"
+version: "1.0"
+
+# 寄存器分组定义
+register_groups:
+  - name: RFPLL
+    description: "RF锁相环寄存器"
+    base_address: 0x20203000
+    range:
+      start: 0x00
+      end: 0x30
+      step: 4
+
+  - name: PLL_DIG_CNTL
+    description: "PLL数字控制寄存器"
+    base_address: 0x2020d000
+    range:
+      start: 0x400
+      end: 0x4bc
+      step: 4
+
+  - name: AGC
+    description: "自动增益控制寄存器"
+    base_address: 0x20203300
+    range:
+      start: 0x00
+      end: 0xd8
+      step: 4
+
+  - name: DC_COMP
+    description: "直流补偿寄存器"
+    base_address: 0x20203400
+    range:
+      start: 0x00
+      end: 0x84
+      step: 4
+
+  - name: TX_ABB
+    description: "发射模拟基带寄存器"
+    base_address: 0x20203a00
+    range:
+      start: 0x00
+      end: 0x48
+      step: 4
+
+  - name: RX_ADC
+    description: "ADC寄存器"
+    base_address: 0x20203b00
+    range:
+      start: 0x00
+      end: 0x20
+      step: 4
+
+  - name: RX_BBF_PGA
+    description: "BBF_PGA寄存器"
+    base_address: 0x20203c00
+    range:
+      start: 0x00
+      end: 0x34
+      step: 4
+
+# 读取配置
+read_settings:
+  default_size: 4           # 默认读取字节数
+  timeout_ms: 100           # 读取超时(毫秒)
+  retry_count: 3            # 重试次数

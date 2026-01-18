@@ -13,6 +13,7 @@ from pages.ble_per import ble_per_page
 from pages.layout import init_notify_timer
 from pages import layout
 from pages.log_page import log_page
+from pages.reg_compare import reg_compare_page
 from db.db_manager import init_db  # 导入数据库初始化函数
 
 
@@ -25,6 +26,8 @@ def index():
     settings_container = settings_page()
     data_view_container = data_view_page()
     ble_per_container = ble_per_page()
+    reg_compare_container = reg_compare_page()
+    reg_compare_container.visible = False
     log_container = log_page()
     log_container.visible = False
 
@@ -37,6 +40,7 @@ def index():
         settings_container.visible = False
         data_view_container.visible = False
         ble_per_container.visible = False
+        reg_compare_container.visible = False
         log_container.visible = False
 
     def show_settings():
@@ -44,6 +48,7 @@ def index():
         settings_container.visible = True
         data_view_container.visible = False
         ble_per_container.visible = False
+        reg_compare_container.visible = False
         log_container.visible = False
 
     def show_data_view():
@@ -51,6 +56,7 @@ def index():
         settings_container.visible = False
         data_view_container.visible = True
         ble_per_container.visible = False
+        reg_compare_container.visible = False
         log_container.visible = False
 
     def show_ble_per():
@@ -58,6 +64,15 @@ def index():
         settings_container.visible = False
         data_view_container.visible = False
         ble_per_container.visible = True
+        reg_compare_container.visible = False
+        log_container.visible = False
+
+    def show_reg_compare():
+        home_container.visible = False
+        settings_container.visible = False
+        data_view_container.visible = False
+        ble_per_container.visible = False
+        reg_compare_container.visible = True
         log_container.visible = False
 
     def show_log():
@@ -65,6 +80,7 @@ def index():
         settings_container.visible = False
         data_view_container.visible = False
         ble_per_container.visible = False
+        reg_compare_container.visible = False
         log_container.visible = True
         # 刷新日志显示
         layout.refresh_log_display()
@@ -79,6 +95,7 @@ def index():
             with ui.row().classes('gap-4'):
                 ui.button('IQ Dump', on_click=show_home).props('icon=home flat')
                 ui.button('BLE PER', on_click=show_ble_per).props('icon=signal_cellular_alt flat')
+                ui.button('寄存器对比', on_click=show_reg_compare).props('icon=compare flat')
                 ui.button('数据查看', on_click=show_data_view).props('icon=table_chart flat')
                 ui.button('日志', on_click=show_log).props('icon=article flat')
                 ui.button('设置', on_click=show_settings).props('icon=settings flat')
