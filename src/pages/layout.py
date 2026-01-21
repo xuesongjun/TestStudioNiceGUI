@@ -39,9 +39,6 @@ def _is_element_active(element) -> bool:
     # _deleted 标志在客户端删除后置为 True
     if getattr(client, '_deleted', False):
         return False
-    # 没有任何 socket 连接也认为不活跃
-    if not client.has_socket_connection:
-        return False
     # 保险起见检查实例表
     if client.id not in Client.instances:
         return False
@@ -149,8 +146,9 @@ def notify(message: str, type: str = 'info', position: str = 'top', timeout: int
 
 def _process_log_queue():
     """处理日志队列中的消息"""
-    global log_area
+    global log_area, scroll_container
 
+    # 如果没有 log_area，跳过但不清空队列
     if log_area is None:
         return
 
@@ -172,12 +170,13 @@ def _process_log_queue():
         try:
             current_content = log_area.content or ""
             new_content = current_content + ''.join(messages)
-            # 使用 set_content 确保更新被推送到前端
-            log_area.set_content(new_content)
+            # 直接更新内容
+            log_area.content = new_content
+            log_area.update()
             if scroll_container is not None:
                 scroll_container.scroll_to(percent=1.0)
-        except Exception as e:
-            # 静默处理更新失败（页面隐藏时可能失败）
+        except Exception:
+            # 静默处理更新失败
             pass
 
 

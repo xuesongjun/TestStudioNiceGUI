@@ -19,12 +19,14 @@ register_groups:
 
   - name: PLL_DIG_CNTL
     description: "PLL数字控制寄存器"
-    base_address: 0x2020d000
+    base_address: 0x2020d400
     range:
-      start: 0x400
-      end: 0x4bc
+      start: 0x00
+      end: 0xbc
       step: 4
-    exclude_offsets: []
+    exclude_offsets: [0x34,0x38,0x58,0x5c,0x98,0xa8,
+                      0x70, 0x74, 0x78, 0x88,
+                      0x8c, 0x90, 0xb0,0xb4,0xb8]
 
   - name: AGC
     description: "自动增益控制寄存器"
@@ -33,7 +35,7 @@ register_groups:
       start: 0x00
       end: 0xd8
       step: 4
-    exclude_offsets: []
+    exclude_offsets: [0xd8]
 
   - name: DC_COMP
     description: "直流补偿寄存器"
@@ -74,6 +76,89 @@ register_groups:
       end: 0x34
       step: 4
     exclude_offsets: []
+
+  - name: RX_RF
+    description: "射频接收寄存器"
+    base_address: 0x20203d00
+    range:
+      start: 0x00
+      end: 0x38
+      step: 4
+    exclude_offsets: []
+
+  - name: APC
+    description: "Tx自动功率控制寄存器"
+    base_address: 0x20203e00
+    range:
+      start: 0x00
+      end: 0xa0
+      step: 4
+    exclude_offsets: []
+
+  - name: TXRF_G
+    description: "TXRF_G寄存器"
+    base_address: 0x20203f00
+    range:
+      start: 0x00
+      end: 0x60
+      step: 4
+    exclude_offsets: []
+
+  - name: BBPLL
+    description: "BBPLL寄存器"
+    base_address: 0x2020d000
+    range:
+      start: 0x00
+      end: 0x14
+      step: 4
+    exclude_offsets: []
+
+  - name: DCXO
+    description: "DCXO寄存器"
+    base_address: 0x20201500
+    range:
+      start: 0x00
+      end: 0x20
+      step: 4
+    exclude_offsets: []
+
+  - name: RFTOP
+    description: "RFTOP寄存器"
+    base_address: 0x2020d200
+    range:
+      start: 0x00
+      end: 0x18
+      step: 4
+    exclude_offsets: []
+
+  - name: RFTOP
+    description: "RFTOP寄存器"
+    base_address: 0x2020d200
+    range:
+      start: 0x00
+      end: 0x18
+      step: 4
+    exclude_offsets: []
+
+  - name: DFE_REG
+    description: "DFE寄存器"
+    base_address: 0x20471000
+    range:
+      start: 0x00
+      end: 0x344
+      step: 4
+    exclude_offsets: [0x28,0x10c,0x23c,0x240,0x244,0x248,
+                      0x24C,0x250,0x254,0x2d4,0x2d8,0x2dc,
+                      0x2e0,0x2e4,0x2e8,0x2ec,0x2f0,0x314]
+
+  - name: BLE_CNTL
+    description: "BLE_CNTL寄存器"
+    base_address: 0x20460000
+    range:
+      start: 0x00
+      end: 0x188
+      step: 4
+    exclude_offsets: [0xfc]
 
 # 读取配置
 read_settings:

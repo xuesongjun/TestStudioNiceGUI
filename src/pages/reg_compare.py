@@ -10,7 +10,9 @@ from logic.reg_compare_logic import (
     get_register_groups,
     compare_registers,
     RegCompareError,
-    CompareResult
+    CompareResult,
+    sync_register,
+    sync_registers_batch
 )
 import threading
 import os
@@ -218,22 +220,47 @@ def reg_compare_page():
 
                 # 差异对比表格
                 with ui.card().classes('w-full'):
-                    ui.label('差异对比结果').classes('text-lg font-bold mb-2')
+                    with ui.row().classes('w-full items-center justify-between mb-2'):
+                        ui.label('差异对比结果').classes('text-lg font-bold')
+                        with ui.row().classes('gap-2'):
+                            # 同步方向选择
+                            sync_direction = ui.select(
+                                label='同步方向',
+                                options=['设备1 -> 设备2', '设备2 -> 设备1'],
+                                value='设备1 -> 设备2'
+                            ).props('outlined dense').style('width: 150px')
 
-                    # 初始列定义
+                            # 一键同步按钮
+                            sync_all_btn = ui.button('一键同步全部', icon='sync', color='orange')
+
+                    # 初始列定义（包含同步操作列）
                     initial_columns = [
                         {'name': 'group', 'label': '分组', 'field': 'group', 'align': 'left', 'sortable': True},
                         {'name': 'address', 'label': '地址', 'field': 'address', 'align': 'center', 'sortable': True},
                         {'name': 'device_0', 'label': '设备1', 'field': 'device_0', 'align': 'center'},
                         {'name': 'device_1', 'label': '设备2', 'field': 'device_1', 'align': 'center'},
+                        {'name': 'sync', 'label': '同步', 'field': 'sync', 'align': 'center'},
                     ]
 
                     result_table = ui.table(
                         columns=initial_columns,
                         rows=[],
                         row_key='id',
-                        pagination={'rowsPerPage': 50}
+                        pagination={'rowsPerPage': 50},
+                        selection='multiple'
                     ).classes('w-full').style('max-height: 500px')
+
+                    # 添加同步按钮的插槽
+                    result_table.add_slot('body-cell-sync', '''
+                        <q-td :props="props">
+                            <q-btn flat dense icon="sync" color="primary" size="sm"
+                                   @click="$parent.$emit('sync_row', props.row)" />
+                        </q-td>
+                    ''')
+
+                    # 选中行同步按钮
+                    with ui.row().classes('w-full gap-2 mt-2'):
+                        sync_selected_btn = ui.button('同步选中项', icon='sync', color='blue')
 
                 # 导出按钮
                 with ui.row().classes('w-full gap-2'):
@@ -253,6 +280,7 @@ def reg_compare_page():
             """清空结果"""
             compare_results.clear()
             result_table.rows.clear()
+            result_table.selected.clear()  # 清除选中状态
             result_table.update()
             total_count_label.text = '总寄存器: 0'
             diff_count_label.text = '差异: 0'
@@ -271,8 +299,21 @@ def reg_compare_page():
                     'field': f'device_{i}',
                     'align': 'center'
                 })
+            # 添加同步操作列
+            columns.append({'name': 'sync', 'label': '同步', 'field': 'sync', 'align': 'center'})
             result_table.columns = columns
             result_table.update()
+
+            # 更新同步方向选项
+            options = []
+            for i in range(device_count.value):
+                for j in range(device_count.value):
+                    if i != j:
+                        options.append(f'设备{i+1} -> 设备{j+1}')
+            sync_direction.options = options
+            if options:
+                sync_direction.value = options[0]
+            sync_direction.update()
 
         def start_compare():
             """开始对比"""
@@ -407,8 +448,171 @@ def reg_compare_page():
                 stop_requested.value = True
                 log("正在停止对比...", color="yellow")
 
+        def parse_sync_direction():
+            """解析同步方向，返回 (源设备索引, 目标设备索引)"""
+            direction = sync_direction.value
+            if not direction:
+                return 0, 1
+            # 格式: "设备1 -> 设备2"
+            parts = direction.replace('设备', '').split(' -> ')
+            if len(parts) == 2:
+                try:
+                    src = int(parts[0]) - 1
+                    dst = int(parts[1]) - 1
+                    return src, dst
+                except:
+                    pass
+            return 0, 1
+
+        def sync_single_row(row):
+            """同步单行寄存器"""
+            if is_running.value:
+                notify("请等待当前任务完成", type='warning')
+                return
+
+            src_idx, dst_idx = parse_sync_direction()
+            src_port = device_ports[src_idx].value
+            dst_port = device_ports[dst_idx].value
+
+            if not src_port or not dst_port:
+                notify("请先配置设备串口", type='warning')
+                return
+
+            # 从行数据中获取地址和源设备的值
+            address_str = row.get('address', '')
+            address = int(address_str, 16) if address_str.startswith('0x') else int(address_str)
+
+            value_str = row.get(f'device_{src_idx}', '')
+            if value_str == 'ERROR' or not value_str:
+                notify("源设备值无效，无法同步", type='warning')
+                return
+            value = int(value_str, 16) if value_str.startswith('0x') else int(value_str)
+
+            def do_sync():
+                success = sync_register(
+                    source_port=src_port,
+                    target_port=dst_port,
+                    baudrate=baudrate.value,
+                    address=address,
+                    value=value,
+                    log_func=lambda msg: log(msg, color="blue")
+                )
+                if success:
+                    notify(f"同步成功: 0x{address:08X}", type='positive')
+                else:
+                    notify(f"同步失败: 0x{address:08X}", type='negative')
+
+            threading.Thread(target=do_sync, daemon=True).start()
+
+        def sync_selected_rows():
+            """同步选中的行"""
+            if is_running.value:
+                notify("请等待当前任务完成", type='warning')
+                return
+
+            selected = result_table.selected
+            if not selected:
+                notify("请先选择要同步的寄存器", type='warning')
+                return
+
+            src_idx, dst_idx = parse_sync_direction()
+            src_port = device_ports[src_idx].value
+            dst_port = device_ports[dst_idx].value
+
+            if not src_port or not dst_port:
+                notify("请先配置设备串口", type='warning')
+                return
+
+            # 收集要同步的寄存器
+            registers = []
+            for row in selected:
+                address_str = row.get('address', '')
+                address = int(address_str, 16) if address_str.startswith('0x') else int(address_str)
+
+                value_str = row.get(f'device_{src_idx}', '')
+                if value_str == 'ERROR' or not value_str:
+                    continue
+                value = int(value_str, 16) if value_str.startswith('0x') else int(value_str)
+                registers.append((address, value))
+
+            if not registers:
+                notify("没有有效的寄存器可同步", type='warning')
+                return
+
+            def do_sync():
+                is_running.value = True
+                try:
+                    success, fail = sync_registers_batch(
+                        source_port=src_port,
+                        target_port=dst_port,
+                        baudrate=baudrate.value,
+                        registers=registers,
+                        log_func=lambda msg: log(msg, color="blue"),
+                        progress_callback=lambda cur, total: setattr(progress_bar, 'value', cur / total)
+                    )
+                    notify(f"同步完成: 成功 {success}, 失败 {fail}", type='positive' if fail == 0 else 'warning')
+                finally:
+                    is_running.value = False
+                    progress_bar.value = 0
+
+            threading.Thread(target=do_sync, daemon=True).start()
+
+        def sync_all_rows():
+            """同步所有差异寄存器"""
+            if is_running.value:
+                notify("请等待当前任务完成", type='warning')
+                return
+
+            if not compare_results:
+                notify("没有差异结果可同步", type='warning')
+                return
+
+            src_idx, dst_idx = parse_sync_direction()
+            src_port = device_ports[src_idx].value
+            dst_port = device_ports[dst_idx].value
+
+            if not src_port or not dst_port:
+                notify("请先配置设备串口", type='warning')
+                return
+
+            # 收集所有差异寄存器
+            registers = []
+            for result in compare_results:
+                value = result.values.get(src_idx)
+                if value is not None:
+                    registers.append((result.address, value))
+
+            if not registers:
+                notify("没有有效的寄存器可同步", type='warning')
+                return
+
+            def do_sync():
+                is_running.value = True
+                sync_all_btn.set_enabled(False)
+                try:
+                    log(f"开始一键同步 {len(registers)} 个寄存器: {src_port} -> {dst_port}", color="blue")
+                    success, fail = sync_registers_batch(
+                        source_port=src_port,
+                        target_port=dst_port,
+                        baudrate=baudrate.value,
+                        registers=registers,
+                        log_func=lambda msg: log(msg, color="blue"),
+                        progress_callback=lambda cur, total: setattr(progress_bar, 'value', cur / total)
+                    )
+                    notify(f"一键同步完成: 成功 {success}, 失败 {fail}", type='positive' if fail == 0 else 'warning')
+                    log(f"一键同步完成: 成功 {success}, 失败 {fail}", color="green" if fail == 0 else "yellow")
+                finally:
+                    is_running.value = False
+                    sync_all_btn.set_enabled(True)
+                    progress_bar.value = 0
+
+            threading.Thread(target=do_sync, daemon=True).start()
+
         # 绑定事件
         start_btn.on_click(start_compare)
         stop_btn.on_click(stop_compare)
+        result_table.on('sync_row', lambda e: sync_single_row(e.args))
+        sync_selected_btn.on_click(sync_selected_rows)
+        sync_all_btn.on_click(sync_all_rows)
 
     return container

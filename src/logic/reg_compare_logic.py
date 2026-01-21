@@ -266,6 +266,127 @@ class DeviceReader:
         except Exception:
             return None
 
+    def write_register(self, address: int, value: int) -> bool:
+        """
+        写入单个寄存器
+
+        Args:
+            address: 寄存器地址
+            value: 要写入的值
+
+        Returns:
+            写入是否成功
+        """
+        if not self.serial or not self.serial.is_open:
+            return False
+
+        try:
+            # 发送写入命令: write 0x{addr} 0x{value}
+            cmd = f"write 0x{address:x} 0x{value:x}\r\n"
+            self.serial.write(cmd.encode())
+            time.sleep(0.1)  # 等待写入完成
+            return True
+        except Exception:
+            return False
+
+
+def sync_register(
+    source_port: str,
+    target_port: str,
+    baudrate: int,
+    address: int,
+    value: int,
+    log_func: Callable[[str], None] = None
+) -> bool:
+    """
+    同步单个寄存器值到目标设备
+
+    Args:
+        source_port: 源设备串口（用于日志显示）
+        target_port: 目标设备串口
+        baudrate: 波特率
+        address: 寄存器地址
+        value: 要写入的值
+        log_func: 日志函数
+
+    Returns:
+        同步是否成功
+    """
+    def _log(msg):
+        if log_func:
+            log_func(msg)
+
+    reader = DeviceReader(target_port, baudrate)
+    try:
+        reader.connect()
+        success = reader.write_register(address, value)
+        if success:
+            _log(f"同步成功: 0x{address:08X} = 0x{value:08X} -> {target_port}")
+        else:
+            _log(f"同步失败: 0x{address:08X} -> {target_port}")
+        return success
+    except Exception as e:
+        _log(f"同步错误: {e}")
+        return False
+    finally:
+        reader.disconnect()
+
+
+def sync_registers_batch(
+    source_port: str,
+    target_port: str,
+    baudrate: int,
+    registers: List[Tuple[int, int]],  # [(address, value), ...]
+    log_func: Callable[[str], None] = None,
+    progress_callback: Callable[[int, int], None] = None
+) -> Tuple[int, int]:
+    """
+    批量同步寄存器值到目标设备
+
+    Args:
+        source_port: 源设备串口（用于日志显示）
+        target_port: 目标设备串口
+        baudrate: 波特率
+        registers: 寄存器列表 [(address, value), ...]
+        log_func: 日志函数
+        progress_callback: 进度回调 (current, total)
+
+    Returns:
+        (成功数, 失败数)
+    """
+    def _log(msg):
+        if log_func:
+            log_func(msg)
+
+    success_count = 0
+    fail_count = 0
+    total = len(registers)
+
+    reader = DeviceReader(target_port, baudrate)
+    try:
+        reader.connect()
+        _log(f"开始批量同步 {total} 个寄存器到 {target_port}")
+
+        for i, (address, value) in enumerate(registers):
+            success = reader.write_register(address, value)
+            if success:
+                success_count += 1
+            else:
+                fail_count += 1
+                _log(f"同步失败: 0x{address:08X}")
+
+            if progress_callback:
+                progress_callback(i + 1, total)
+
+        _log(f"批量同步完成: 成功 {success_count}, 失败 {fail_count}")
+        return success_count, fail_count
+
+    except Exception as e:
+        _log(f"批量同步错误: {e}")
+        return success_count, fail_count
+    finally:
+        reader.disconnect()
+
 
 def compare_registers(
     device_ports: List[str],
