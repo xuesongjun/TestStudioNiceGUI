@@ -475,6 +475,10 @@ def sensitivity_scan(
         power_list.append(current)
         current += step
 
+    # 检查功率列表是否有效
+    if not power_list:
+        raise PerTestError(f"功率范围设置错误：起始功率({start_power} dBm)必须小于等于截止功率({stop_power} dBm)")
+
     total_channels = len(channels)
     total_points = total_channels * len(power_list)
     results = []
@@ -590,6 +594,7 @@ def sensitivity_scan(
 
             sensitivity = None
             sensitivity_rssi = None
+            rssi = None  # 初始化 rssi，防止 power_list 为空时变量未定义
 
             # 从低功率到高功率扫描，找到PER首次满足门限的点
             for power in power_list:
