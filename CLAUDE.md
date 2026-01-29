@@ -191,6 +191,7 @@ python -u src/main.py
 - [x] IQ 数据文件解析和可视化
 - [x] BLE PER 丢包率测试（支持 LE1M/LE2M/LR500K/LR125K）
 - [x] BLE 灵敏度扫描（自动功率扫描寻找灵敏度点）
+- [x] BLE 灵敏度扫描参数校验（起始功率 > 截止功率时给出清晰提示）
 - [x] 寄存器对比（多设备并行读取、差异高亮）
 - [x] 寄存器对比排除校准寄存器（YAML 配置 exclude_offsets）
 - [x] 差异寄存器同步（单项同步、批量同步、一键同步）
@@ -201,6 +202,30 @@ python -u src/main.py
 - [x] 仪器连接检测
 - [x] 设置页面
 - [x] NF 计算功能
+- [x] Claude Code skills 和 CLAUDE.md 项目文档
+
+### 2026-01-29 进度记录
+
+#### 本次完成
+- 修复 `sensitivity_scan()` 中 `rssi` 变量未初始化导致的 `referenced before assignment` 错误（`src/logic/ble_per_test.py:591`）
+- 添加灵敏度扫描功率范围校验：`start_power > stop_power` 时抛出 `PerTestError` 并给出中文提示（`src/logic/ble_per_test.py:478`）
+- 创建项目 CLAUDE.md 文档（项目简介、目录结构、技术栈、代码风格、开发进度）
+- 创建 7 个 Claude Code skills：`run`、`fix-bug`、`add-page`、`add-reg-group`、`commit`、`save-progress`、`sync-context`
+
+#### 关键变更
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `src/logic/ble_per_test.py` | Bug 修复 | 在 `sensitivity_scan` 的 for 循环前添加 `rssi = None` 初始化 |
+| `src/logic/ble_per_test.py` | 参数校验 | `power_list` 为空时抛出 `PerTestError` 提示功率范围设置错误 |
+| `CLAUDE.md` | 新建 | 项目完整文档 |
+| `.claude/skills/skills/*.md` | 新建 | 7 个 skills 文件（run, fix-bug, add-page, add-reg-group, commit, save-progress, sync-context） |
+
+#### 断点 / 待续
+- 日志实时刷新问题仍未彻底解决，上次修改在 `src/pages/layout.py` 的 `_process_log_queue()` 函数，可能需要进一步排查 NiceGUI 客户端生命周期问题
+- `src/config_manager.py:6` 硬编码路径 `config/test_config.json` 与实际路径 `config/test_studio_cfg.json` 不匹配，需要修正
+
+#### 运行命令 / 备忘
+- 无新增依赖或脚本
 
 ### 已知问题
 
