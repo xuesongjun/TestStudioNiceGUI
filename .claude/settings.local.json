@@ -16,7 +16,8 @@
       "Bash(taskkill //F //PID 24692)",
       "Bash(git -C \"c:/workspace/test_studio\" diff)",
       "Bash(git -C \"c:/workspace/test_studio\" checkout -- src/main.py src/pages/layout.py)",
-      "Bash(taskkill //F //PID 13032)"
+      "Bash(taskkill //F //PID 13032)",
+      "Bash(dir /s /b /a:-d src 2)"
     ]
   }
 }
